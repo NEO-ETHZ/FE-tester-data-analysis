@@ -122,18 +122,16 @@ def extract_metadata(
     PUND_Read_delay_s = None
     PUND_Pulse_points = None
 
+    # --- Indexing the measurement parameters lines ---
+
+    for line in data_lines:
+        if "Data Measurement Parameters" in line:
+            params_start_index = data_lines.index(line)
+            break
+    data_lines_02 = data_lines[params_start_index:]
+
     # --- Parse: première occurrence uniquement ---
     for line in data_lines:
-
-        if "-DHM" in line and DHM_present is False:
-            DHM_present = True
-            DHM_number = line.split("-DHM")[0].strip()
-        if "-CVM" in line and CVM_present is False:
-            CVM_present = True
-            CVM_number = line.split("-CVM")[0].strip()
-        if "-PM" in line and PUND_present is False:
-            PUND_present = True
-            PUND_number = line.split("-PUND")[0].strip()
 
         if "Fatigue Amplitude [V]" in line and Fatigue_Amplitude_V is None:
             Fatigue_Amplitude_V = line.strip()
@@ -198,6 +196,21 @@ def extract_metadata(
         if "Pulse Points:" in line and PUND_Pulse_points is None:
             PUND_Pulse_points = line.split("Pulse Points:", 1)[-1].strip()
             PUND_Pulse_points = "Pulse Points: " + PUND_Pulse_points
+    
+    for line in data_lines_02:
+
+        if "-DHM" in line and DHM_present is False:
+            DHM_present = True
+            DHM_number = line.split("-DHM")[0].strip()
+            print(f"DHM is present:{DHM_present}, number : {DHM_number}")
+        if "-CVM" in line and CVM_present is False:
+            CVM_present = True
+            CVM_number = line.split("-CVM")[0].strip()
+            print(f"CVM is present: {CVM_present}, number : {CVM_number}")
+        if "-PM" in line and PUND_present is False:
+            PUND_present = True
+            PUND_number = line.split("-PM")[0].strip()
+            print(f"PUND is present: {PUND_present}, number : {PUND_number}")
 
 
 
@@ -448,60 +461,175 @@ def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, met
 
 
 
-def DHM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_DHM):
+def DHM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_DHM, metadata_dict_DHM):
+    
+    if metadata_dict_DHM["DHM_present"] is False:
+        return []  # Return an empty list if DHM data is not present
+    else:
         # Read all lines once we know the indices so we can slice them.
-    with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
-        lines = f.readlines()
+        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
 
-    index_table = []
+        # Depends how we measure on the FE tester, DHM might not be in Table number 1
+        index_table = []
+        DHM_Table_check = "Data Table [" + metadata_dict_DHM["DHM_number"] + ","
 
-    for i, str in enumerate(lines):
-        if f"Data Table [1," in str:
-            index_table.append(i)
+        for i, str in enumerate(lines):
+            if DHM_Table_check in str:
+                index_table.append(i)
 
-    #DHM is metadate + data of every DHM loop
-    DHM = []
-    for i, index in enumerate(index_table):  
+        #DHM is metadate + dataframe of every DHM loop
+        DHM = []
+        for i, index in enumerate(index_table):
 
-        if i < len(Cycles_total) - 1:
-            DHM.append(lines[index:index_table[i+1]])
-        if i == len(Cycles_total) - 1:
-            DHM.append(lines[index:])
+            if i < len(Cycles_total) - 1:
+                DHM.append(lines[index:index_table[i+1]])
+            if i == len(Cycles_total) - 1:
+                Delta = index - index_table[i-1]
+                DHM.append(lines[index:index + Delta])
 
 
-    #DHM_dataframe is only the data without metadata
-    DHM_dataframe=[]
-    header_index = None
-
-    for i, loop in enumerate(DHM):
+        #DHM_dataframe is only the data without metadata
+        DHM_dataframe=[]
         header_index = None
-        for idx, line in enumerate(loop):
-            if line.count('\t') > 5 and header_index is None:
-                header_index = idx
-                break
-        if header_index is not None:
-            data_block = loop[header_index:]
-            df = pd.read_csv(io.StringIO(''.join(data_block)), sep='\t', engine='python')
-            DHM_dataframe.append(df)
-
-    if point_removal > 0:
-            DHM_dataframe = DHM_dataframe[:-point_removal]
-
-    print(len(DHM_dataframe), "P-V loops loaded.")
-
-    # Add a column with the cycle number to each DataFrame
-    for i, (df, cycle) in enumerate(zip(DHM_dataframe, df_fatigue_DHM["Cycles [n]"])):
-        df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
-
-    return DHM_dataframe
 
 
+        for i, loop in enumerate(DHM):
+            header_index = None
+
+            for idx, line in enumerate(loop):
+                if line.count('\t') > 5 and header_index is None:
+                    header_index = idx
+                    break
+            if header_index is not None:
+                data_block = loop[header_index:]
+                df = pd.read_csv(io.StringIO(''.join(data_block)), sep='\t', engine='python')
+                DHM_dataframe.append(df)
+
+        if point_removal > 0:
+                DHM_dataframe = DHM_dataframe[:-point_removal]
+
+        print(len(DHM_dataframe), "DHM dataframe loaded.")
+
+        # Add a column with the cycle number to each DataFrame
+        for i, (df, cycle) in enumerate(zip(DHM_dataframe, df_fatigue_DHM["Cycles [n]"])):
+            df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
+
+        return DHM_dataframe
 
 
 
 
+def CVM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_CVM, metadata_dict_CVM):
+    if metadata_dict_CVM["CVM_present"] is False:
+        return []  # Return an empty list if CVM data is not present   
+    else:
+        # Read all lines once we know the indices so we can slice them.
+        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        # Depends how we measure on the FE tester, CVM might not be in Table number 1
+        index_table = []
+        CVM_Table_check = "Data Table [" + metadata_dict_CVM["CVM_number"] + ","
+
+        for i, str in enumerate(lines):
+            if CVM_Table_check in str:
+                index_table.append(i)
+
+        #CVM is metadate + dataframe of every CVM loop
+        CVM = []
+        for i, index in enumerate(index_table):
+
+            if i < len(Cycles_total) - 1:
+                CVM.append(lines[index:index_table[i+1]])
+            if i == len(Cycles_total) - 1:
+                Delta = index - index_table[i-1]
+                CVM.append(lines[index:index + Delta])
 
 
+        #CVM_dataframe is only the data without metadata
+        CVM_dataframe=[]
+        header_index = None
+
+
+        for i, loop in enumerate(CVM):
+            header_index = None
+
+            for idx, line in enumerate(loop):
+                if line.count('\t') > 5 and header_index is None:
+                    header_index = idx
+                    break
+            if header_index is not None:
+                data_block = loop[header_index:]
+                df = pd.read_csv(io.StringIO(''.join(data_block)), sep='\t', engine='python')
+                CVM_dataframe.append(df)
+
+        if point_removal > 0:
+                CVM_dataframe = CVM_dataframe[:-point_removal]
+
+        print(len(CVM_dataframe), "CVM dataframe loaded.")
+
+        # Add a column with the cycle number to each DataFrame
+        for i, (df, cycle) in enumerate(zip(CVM_dataframe, df_fatigue_CVM["Cycles [n]"])):
+            df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
+
+        return CVM_dataframe
+
+
+def PUND_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_PUND, metadata_dict_PUND):
+    if metadata_dict_PUND["PUND_present"] is False:
+        return []  # Return an empty list if PUND data is not present   
+    else:
+        # Read all lines once we know the indices so we can slice them.
+        with open(full_path, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        # Depends how we measure on the FE tester, PUND might not be in Table number 1
+        index_table = []
+        PUND_Table_check = "Data Table [" + metadata_dict_PUND["PUND_number"] + ","
+
+        for i, str in enumerate(lines):
+            if PUND_Table_check in str:
+                index_table.append(i)
+
+        #PUND is metadate + dataframe of every PUND loop
+        PUND = []
+        for i, index in enumerate(index_table):
+
+            if i < len(Cycles_total) - 1:
+                PUND.append(lines[index:index_table[i+1]])
+            if i == len(Cycles_total) - 1:
+                Delta = index - index_table[i-1]
+                PUND.append(lines[index:index + Delta])
+
+
+        #PUND_dataframe is only the data without metadata
+        PUND_dataframe=[]
+        header_index = None
+
+
+        for i, loop in enumerate(PUND):
+            header_index = None
+
+            for idx, line in enumerate(loop):
+                if line.count('\t') > 5 and header_index is None:
+                    header_index = idx
+                    break
+            if header_index is not None:
+                data_block = loop[header_index:]
+                df = pd.read_csv(io.StringIO(''.join(data_block)), sep='\t', engine='python')
+                PUND_dataframe.append(df)
+
+        if point_removal > 0:
+                PUND_dataframe = PUND_dataframe[:-point_removal]
+
+        print(len(PUND_dataframe), "PUND dataframe loaded.")
+
+        # Add a column with the cycle number to each DataFrame
+        for i, (df, cycle) in enumerate(zip(PUND_dataframe, df_fatigue_PUND["Cycles [n]"])):
+            df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
+
+        return PUND_dataframe
 
 
 
