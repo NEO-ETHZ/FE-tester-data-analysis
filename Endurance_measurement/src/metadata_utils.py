@@ -396,37 +396,37 @@ def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, met
     
     cols_DHM = [
         'Cycles [n]',
-        '1-DHM Pr+ [uC/cm2]',
-        '1-DHM Pr- [uC/cm2]',
-        '1-DHM Vc+ [V]',
-        '1-DHM Vc- [V]',
-        '1-DHM Wloss [uJ/cm2]',
-        '1-DHM Ipk+ [A]',
-        '1-DHM Ipk- [A]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Pr+ [uC/cm2]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Pr- [uC/cm2]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Vc+ [V]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Vc- [V]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Wloss [uJ/cm2]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Ipk+ [A]',
+        f'{metadata_dict_DHM["DHM_number"]}-DHM Ipk- [A]',
     ]
 
     cols_CVM = [
         'Cycles [n]',
-        '2-CVM Cav [F]',
-        '2-CVM Rav [Ohm]',
-        '2-CVM TanDmax [1]',
-        '2-CVM TanDav [1]',
-        '2-CVM Vav [V]',
-        '2-CVM Iav [A]',
-        '2-CVM EpsAv [1]',
-        '2-CVM Cpk+ [F]',
-        '2-CVM Cpk- [F]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Cav [F]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Rav [Ohm]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM TanDmax [1]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM TanDav [1]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Vav [V]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Iav [A]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM EpsAv [1]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Cpk+ [F]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Cpk- [F]',
     ]
 
     cols_PUND = [
         'Cycles [n]',
-        '3-PM Psw [uC/cm2]',
-        '3-PM Ipk+ [A]',
-        '3-PM Ipk- [A]',
-        '3-PM Vc+ [V]',
-        '3-PM Vc- [V]',
-        '3-PM Pr+ [uC/cm2]',
-        '3-PM Pr- [uC/cm2]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Psw [uC/cm2]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Ipk+ [A]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Ipk- [A]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Vc+ [V]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Vc- [V]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Pr+ [uC/cm2]',
+        f'{metadata_dict_PUND["PUND_number"]}-PM Pr- [uC/cm2]',
     ]
 
 
@@ -630,6 +630,7 @@ def PUND_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_PUND
             df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
 
         return PUND_dataframe
+
 
 
 
