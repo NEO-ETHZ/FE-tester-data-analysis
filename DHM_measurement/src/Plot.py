@@ -13,7 +13,10 @@ from datetime import datetime
 
 
 
-def DHM_plot(DHM_dataframe, metadata_df, label_size, color_PV, color_IV):
+def DHM_plot(DHM_dataframe, metadata_df, label_size, color_PV, color_IV, output_path, base_name):
+
+    output_path = os.path.join(output_path, "DHM_plots")
+    os.makedirs(output_path, exist_ok=True)
 
 
     for i in range(len(DHM_dataframe)):
@@ -52,7 +55,7 @@ def DHM_plot(DHM_dataframe, metadata_df, label_size, color_PV, color_IV):
             va='center',
             bbox=dict(boxstyle="round", facecolor="whitesmoke", edgecolor="gray")
         )
-
+        plt.savefig(os.path.join(output_path, f"{base_name}_{i}.png"), dpi=300, bbox_inches='tight')
         plt.show()
         plt.close()
 

@@ -14,6 +14,10 @@ import re
 import io
 from datetime import datetime
 
+def folder_main_plot(output_path):
+        output_main_plot = os.path.join(output_path, "Main plot")
+        os.makedirs(output_main_plot, exist_ok=True)  # Ensure output directory exists
+        # Save figure (bbox_inches='tight' ensures everything fits inside)
 
 def main_plot(df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DHM, metadata_dict_CVM, metadata_dict_PUND, metadata_str_DHM, metadata_str_CVM, metadata_str_PUND, output_path, base_name, labelsize):
     import os
@@ -89,9 +93,8 @@ def main_plot(df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DHM
         hspace=0.25    # 🔥 espace vertical entre les lignes
         )
         
-        output_path_02 = os.path.join(output_path, base_name)
-        os.makedirs(output_path_02, exist_ok=True)  # Ensure output directory exists
-        output_main_plot = os.path.join(output_path_02, "Main plot")
+
+        output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)  # Ensure output directory exists
         # Save figure (bbox_inches='tight' ensures everything fits inside)
 
@@ -182,10 +185,7 @@ def main_plot(df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DHM
         hspace=0.25    # 🔥 espace vertical entre les lignes
         )
 
-        
-        output_path_02 = os.path.join(output_path, base_name)
-        os.makedirs(output_path_02, exist_ok=True)  # Ensure output directory exists
-        output_main_plot = os.path.join(output_path_02, "Main plot")
+        output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)  # Ensure output directory exists
         # Save figure (bbox_inches='tight' ensures everything fits inside)
 
@@ -268,9 +268,7 @@ def main_plot(df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DHM
         hspace=0.25    # 🔥 espace vertical entre les lignes
         )
         
-        output_path_02 = os.path.join(output_path, base_name)
-        os.makedirs(output_path_02, exist_ok=True)  # Ensure output directory exists
-        output_main_plot = os.path.join(output_path_02, "Main plot")
+        output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)  # Ensure output directory exists
         # Save figure (bbox_inches='tight' ensures everything fits inside)
 
