@@ -264,16 +264,16 @@ def extract_metadata(
     }
 
     metadata_CVM = {
-        "CVM_Voltage": CVM_Voltage,
-        "CVM_Base_Frequency_Hz": CVM_Base_Frequency_Hz,
-        "CVM_ss_Frequency_Hz": CVM_ss_Frequency_Hz,
-        "CVM_ss_amplitude_V": CVM_ss_amplitude_V,
-        "CVM_datapoints": CVM_datapoints,
         "Measurement_date_raw": Measurement_date,
         "Measurement_date_iso": Measurement_date_iso,
         "SampleName": SampleName,
         "Area_mm2": Area_mm2,
         "Device_area_um2": Device_area_um2,
+        "CVM_Voltage": CVM_Voltage,
+        "CVM_Base_Frequency_Hz": CVM_Base_Frequency_Hz,
+        "CVM_ss_Frequency_Hz": CVM_ss_Frequency_Hz,
+        "CVM_ss_amplitude_V": CVM_ss_amplitude_V,
+        "CVM_datapoints": CVM_datapoints,
         "Fatigue_Amplitude_V": Fatigue_Amplitude_V,
         "Fatigue_Offset_V": Fatigue_Offset_V,
         "Fatigue_Frequency_Hz": Fatigue_Frequency_Hz,
@@ -285,6 +285,11 @@ def extract_metadata(
     }
 
     metadata_PUND = {
+        "Measurement_date_raw": Measurement_date,
+        "Measurement_date_iso": Measurement_date_iso,
+        "SampleName": SampleName,
+        "Area_mm2": Area_mm2,
+        "Device_area_um2": Device_area_um2,
         "PUND_Write_Amplitude_V": PUND_Write_Amplitude_V,
         "PUND_Pulse_time_s": PUND_Pulse_time_s,
         "PUND_Pulse_rise_time_s": PUND_Pulse_rise_time_s,
@@ -293,11 +298,6 @@ def extract_metadata(
         "PUND_Write_delay_s": PUND_Write_delay_s,
         "PUND_Read_delay_s": PUND_Read_delay_s,
         "PUND_Pulse_points": PUND_Pulse_points,
-        "Measurement_date_raw": Measurement_date,
-        "Measurement_date_iso": Measurement_date_iso,
-        "SampleName": SampleName,
-        "Area_mm2": Area_mm2,
-        "Device_area_um2": Device_area_um2,
         "Fatigue_Amplitude_V": Fatigue_Amplitude_V,
         "Fatigue_Offset_V": Fatigue_Offset_V,
         "Fatigue_Frequency_Hz": Fatigue_Frequency_Hz,
