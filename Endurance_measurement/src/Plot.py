@@ -295,83 +295,137 @@ def Plot_single_DHM(DHM_dataframe, Cycles_total, label_size, output_main_plot, b
     if not metadata_dict_DHM.get("DHM_present", False):
         return
 
+    #To remove the breakdown point
+    Removal = len(Cycles_total) - len(DHM_dataframe)
+    Cycles_total = Cycles_total[:-Removal]
+
     legend_threshold = 15
     n_curves = len(DHM_dataframe)
-    use_legend = False
+    use_legend = n_curves <= legend_threshold
 
-    if n_curves <= legend_threshold:
-        use_legend = True
-
-    fig, axs = plt.subplots(1, 2, figsize=(18, 6))
+    # Figure commune aux deux cas
+    fig, axs = plt.subplots(1, 2, figsize=(22, 6))
     fig.suptitle(f"DHM - {base_name}", fontsize=label_size + 2, fontweight="bold")
 
-    # --- deux colormaps dédiés, tronqués pour éviter le blanc ---
-    cmap_P = _truncate_cmap(cm.Greens, minval=0.15, maxval=0.95)   # vert pour P–V
-    cmap_I = _truncate_cmap(cm.Blues,  minval=0.15, maxval=0.95)   # bleu pour I–V
-
-    # Normalisation par numéro de cycle
-    vmin, vmax = float(np.min(Cycles_total)), float(np.max(Cycles_total))
-    norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
-
-    # --- tracés ---
-    for i, j in enumerate(Cycles_total):
-        df = DHM_dataframe[i]
-
-        # couleurs par axe
-        color_P = cmap_P(norm(j))
-        color_I = cmap_I(norm(j))
-
-        # alpha constant (plus lisible que dégradé très pâle)
-        alpha = 0.75
-        label = None
-
-        if use_legend is True:
-            label = f"Cycle {j}"
-
-        axs[0].plot(df['V+ [V]'], df['P1 [uC/cm2]'], color=color_P, alpha=alpha, label=label)
-        axs[1].plot(df['V+ [V]'], df['I1 [A]'],      color=color_I, alpha=alpha, label=label)
-
-    # --- styles ---
-    axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
-    axs[0].set_title("P–V loop")
-    axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[0].tick_params(axis='both', labelsize=label_size)
-
-    axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[1].set_ylabel("Current [A]", fontsize=label_size)
-    axs[1].set_title("I–V loop")
-    axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[1].tick_params(axis='both', labelsize=label_size)
-
     if use_legend:
-        # Légende compacte quand peu de courbes
-        handles, labels = axs[0].get_legend_handles_labels()
-        by_label = dict(zip(labels, handles))
-        fig.legend(by_label.values(), by_label.keys(),
-                   loc="center left", bbox_to_anchor=(1.02, 0.5),
-                   borderaxespad=0, fontsize=label_size-2, title="Cycles")
-        fig.subplots_adjust(right=0.86, wspace=0.55)
+        # --------- MODE "PEU DE COURBES" : COULEURS FIXES + ALPHA CROISSANT ---------
+        base_color_P = (0.25, 0.85, 0.55)  # vert P–V
+        base_color_I = (0.35, 0.65, 0.85)  # bleu I–V
+        alpha_list = np.linspace(0.25, 1.0, n_curves)
+
+        for i, cycle in enumerate(Cycles_total):
+            df = DHM_dataframe[i]
+            alpha = float(alpha_list[i])
+            label = f"Cycle {cycle}"
+
+            axs[0].plot(
+                df["V+ [V]"],
+                df["P1 [uC/cm2]"],
+                color=base_color_P,
+                alpha=alpha,
+                label=label,
+            )
+
+            axs[1].plot(
+                df["V+ [V]"],
+                df["I1 [A]"],
+                color=base_color_I,
+                alpha=alpha,
+                label=label,
+            )
+
+        # Styles
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
+        axs[0].set_title("P–V loop")
+        axs[0].grid(True, color="lightgray", linestyle="--", linewidth=0.5)
+        axs[0].tick_params(axis="both", labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("Current [A]", fontsize=label_size)
+        axs[1].set_title("I–V loop")
+        axs[1].grid(True, color="lightgray", linestyle="--", linewidth=0.5)
+        axs[1].tick_params(axis="both", labelsize=label_size)
+
+        # Légendes à droite de chaque subplot (sans doublons)
+        for ax in axs:
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+
+            ax.legend(
+                handles=list(by_label.values()),
+                labels=list(by_label.keys()),
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+                borderaxespad=0,
+                fontsize=label_size - 2,
+                title="Cycles",
+            )
+
+        fig.subplots_adjust(right=0.85, wspace=0.55)
+
     else:
-        # --- 2 colorbars séparées, une par axe ---
-        sm_P = cm.ScalarMappable(cmap=cmap_P, norm=norm); sm_P.set_array([])
-        sm_I = cm.ScalarMappable(cmap=cmap_I, norm=norm); sm_I.set_array([])
+        # --------- MODE "GROS DATASET" : COLORMAPS + COLORBARS ---------
+        cmap_P = _truncate_cmap(cm.Greens, minval=0.15, maxval=0.95)
+        cmap_I = _truncate_cmap(cm.Blues,  minval=0.15, maxval=0.95)
+
+        vmin, vmax = float(np.min(Cycles_total)), float(np.max(Cycles_total))
+        norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
+
+        for i, cycle in enumerate(Cycles_total):
+            df = DHM_dataframe[i]
+
+            color_P = cmap_P(norm(cycle))
+            color_I = cmap_I(norm(cycle))
+            alpha = 0.75
+
+            axs[0].plot(
+                df["V+ [V]"],
+                df["P1 [uC/cm2]"],
+                color=color_P,
+                alpha=alpha,
+            )
+
+            axs[1].plot(
+                df["V+ [V]"],
+                df["I1 [A]"],
+                color=color_I,
+                alpha=alpha,
+            )
+
+        # Styles
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
+        axs[0].set_title("P–V loop")
+        axs[0].grid(True, color="lightgray", linestyle="--", linewidth=0.5)
+        axs[0].tick_params(axis="both", labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("Current [A]", fontsize=label_size)
+        axs[1].set_title("I–V loop")
+        axs[1].grid(True, color="lightgray", linestyle="--", linewidth=0.5)
+        axs[1].tick_params(axis="both", labelsize=label_size)
+
+        # Colorbars
+        sm_P = cm.ScalarMappable(cmap=cmap_P, norm=norm)
+        sm_P.set_array([])
+
+        sm_I = cm.ScalarMappable(cmap=cmap_I, norm=norm)
+        sm_I.set_array([])
 
         cbar0 = fig.colorbar(sm_P, ax=axs[0], fraction=0.03, pad=0.04)
-        cbar0.set_label('Cycle number', fontsize=label_size)
+        cbar0.set_label("Cycle number", fontsize=label_size)
 
         cbar1 = fig.colorbar(sm_I, ax=axs[1], fraction=0.03, pad=0.04)
-        cbar1.set_label('Cycle number', fontsize=label_size)
+        cbar1.set_label("Cycle number", fontsize=label_size)
 
-        fig.subplots_adjust(right=0.9, wspace=0.55)
+        fig.subplots_adjust(right=0.90, wspace=0.55)
 
-    # sauvegarde
+    # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_DHM['Measurement_date_iso']}_{base_name}_DHM.png"
     plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
     plt.show()
-    plt.close('all')
-
-
+    plt.close("all")
 
 
 
@@ -379,217 +433,280 @@ def Plot_single_CVM(CVM_dataframe, Cycles_total, label_size, output_main_plot, b
     if not metadata_dict_CVM.get("CVM_present", False):
         return
 
+    #To remove the breakdown point
+    Removal = len(Cycles_total) - len(CVM_dataframe)
+    Cycles_total = Cycles_total[:-Removal]
+
     legend_threshold = 15
     n_curves = len(CVM_dataframe)
+    use_legend = n_curves <= legend_threshold
 
-    use_legend = False
-    if n_curves <= legend_threshold:
-        use_legend = True
-
-    # Figure
-    fig, axs = plt.subplots(1, 2, figsize=(18, 6))
+    # Figure commune aux deux cas
+    fig, axs = plt.subplots(1, 2, figsize=(22, 6))
     fig.suptitle(f"CVM - {base_name}", fontsize=label_size + 2, fontweight="bold")
 
-    # Colormaps tronqués (rouge pour C–V, vert pour tanδ–V)
-    cmap_C  = _truncate_cmap(cm.Reds,  minval=0.15, maxval=0.95)
-    cmap_td = _truncate_cmap(cm.Greens, minval=0.15, maxval=0.95)
-
-    # Normalisation par numéro de cycle
-    vmin, vmax = float(np.min(Cycles_total)), float(np.max(Cycles_total))
-    norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
-
-    label = None
-    if use_legend is True:
-        label = f"Cycle {j}"
-
-    # Tracés
-    for i, j in enumerate(Cycles_total):
-        df = CVM_dataframe[i]
-
-        color_C  = cmap_C(norm(j))
-        color_td = cmap_td(norm(j))
-        alpha = 0.75
-        if n_curves <= legend_threshold:
-            use_legend = True
-
-        axs[0].plot(df['Bias [V]'], df['C [F]'],         color=color_C,  alpha=alpha, label=label)
-        axs[1].plot(df['Bias [V]'], df['tan(delta) [1]'], color=color_td, alpha=alpha, label=label)
-
-    # Styles
-    axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[0].set_ylabel("C [F]", fontsize=label_size)
-    axs[0].set_title("C–V loop")
-    axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[0].tick_params(axis='both', labelsize=label_size)
-
-    axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[1].set_ylabel("tan(δ)", fontsize=label_size)
-    axs[1].set_title("tan(δ)–V loop")
-    axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[1].tick_params(axis='both', labelsize=label_size)
-
-    # Légende (≤25) ou colorbars (>25)
     if use_legend:
-        # 1) Récupère toutes les courbes (handles) + leurs labels sur l'axe de gauche.
-        #    get_legend_handles_labels() renvoie DEUX listes parallèles : [handles], [labels]
-        handles_left, labels_left = axs[0].get_legend_handles_labels()
+        # --------- MODE "PEU DE COURBES" : COULEURS FIXES + ALPHA CROISSANT ---------
+        base_color_C = (0.65, 0.35, 0.45)  # vert P–V
+        base_color_delta = (0.45, 0.45, 0.15)  # bleu I–V
+        alpha_list = np.linspace(0.25, 1.0, n_curves)
 
-        # 2) Dé-doublonne les labels.
-        #    zip(labels, handles) crée des paires (label -> handle).
-        #    dict(...) supprime les doublons en gardant le dernier handle pour chaque label.
-        by_label = dict(zip(labels_left, handles_left))
+        for i, cycle in enumerate(Cycles_total):
+            df = CVM_dataframe[i]
+            alpha = float(alpha_list[i])
+            label = f"Cycle {cycle}"
 
-        # 3) Crée UNE légende globale pour la figure (au lieu de 2 légendes séparées par axe),
-        #    et place-la en dehors des axes, à droite, centrée verticalement.
-        fig.legend(
-            handles=list(by_label.values()),        # les courbes (sans doublons)
-            labels=list(by_label.keys()),           # les libellés correspondants
-            loc="center left",                      # ancre la légende à gauche...
-            bbox_to_anchor=(1.02, 0.5),             # ...mais décalée à droite de la figure
-            borderaxespad=0,
-            fontsize=label_size - 2,
-            title="Cycles"
-        )
+            axs[0].plot(
+                df["Bias [V]"],
+                df["C [F]"],
+                color=base_color_C,
+                alpha=alpha,
+                label=label,
+            )
 
-        # 4) Laisse plus d'espace à droite pour que la légende ne soit pas coupée.
-        #    right=0.86 signifie : la zone des subplots occupe ~86% de la largeur.
-        fig.subplots_adjust(right=0.86, wspace=0.55)
+            axs[1].plot(
+                df["Bias [V]"],
+                df["tan(delta) [1]"],
+                color=base_color_delta,
+                alpha=alpha,
+                label=label,
+            )
+
+        # Styles
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("C [F]", fontsize=label_size)
+        axs[0].set_title("C–V loop")
+        axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[0].tick_params(axis='both', labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("tan(δ)", fontsize=label_size)
+        axs[1].set_title("tan(δ)–V loop")
+        axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[1].tick_params(axis='both', labelsize=label_size)
+
+
+        # Légendes à droite de chaque subplot (sans doublons)
+        for ax in axs:
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+
+            ax.legend(
+                handles=list(by_label.values()),
+                labels=list(by_label.keys()),
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+                borderaxespad=0,
+                fontsize=label_size - 2,
+                title="Cycles",
+            )
+
+        fig.subplots_adjust(right=0.85, wspace=0.55)
 
     else:
-        # --- Cas "beaucoup de courbes" : on remplace la légende texte par des COLORBARS ---
+        # --------- MODE "GROS DATASET" : COLORMAPS + COLORBARS ---------
+        cmap_C  = _truncate_cmap(cm.Reds,  minval=0.15, maxval=0.95)
+        cmap_td = _truncate_cmap(cm.Greens, minval=0.15, maxval=0.95)
 
-        # 1) Crée deux "mappages scalaires" (1 par axe), qui disent à Matplotlib :
-        #    "utilise ce colormap (cmap_*) et cette normalisation (norm) pour convertir
-        #     la valeur 'cycle' -> une couleur".
-        sm_C = cm.ScalarMappable(cmap=cmap_C, norm=norm)
-        sm_C.set_array([])   # hack requis par Matplotlib pour certaines versions (pas de data array)
+        vmin, vmax = float(np.min(Cycles_total)), float(np.max(Cycles_total))
+        norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
 
-        sm_td = cm.ScalarMappable(cmap=cmap_td, norm=norm)
-        sm_td.set_array([])
+        for i, cycle in enumerate(Cycles_total):
+            df = CVM_dataframe[i]
 
-        # 2) Ajoute une colorbar sur l'axe de gauche (C–V).
-        #    - fraction : part de la hauteur de l'axe occupée par la barre
-        #    - pad      : espacement horizontal entre l'axe et la colorbar
-        cbar0 = fig.colorbar(
-            sm_C,
-            ax=axs[0],
-            fraction=0.03,
-            pad=0.04
-        )
-        cbar0.set_label('Cycle number', fontsize=label_size)
+            color_C = cmap_C(norm(cycle))
+            color_Td = cmap_td(norm(cycle))
+            alpha = 0.75
 
-        # 3) Même chose sur l'axe de droite (tanδ–V).
-        cbar1 = fig.colorbar(
-            sm_td,
-            ax=axs[1],
-            fraction=0.03,
-            pad=0.04
-        )
-        cbar1.set_label('Cycle number', fontsize=label_size)
+            axs[0].plot(
+                df["Bias [V]"],
+                df["C [F]"],
+                color=color_C,
+                alpha=alpha,
+            )
 
-        # 4) Laisse un peu d'espace à droite (moins que pour une grosse légende texte).
+            axs[1].plot(
+                df["Bias [V]"],
+                df["tan(delta) [1]"],
+                color=color_Td,
+                alpha=alpha,
+            )
+
+        # Styles
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("C [F]", fontsize=label_size)
+        axs[0].set_title("C–V loop")
+        axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[0].tick_params(axis='both', labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("tan(δ)", fontsize=label_size)
+        axs[1].set_title("tan(δ)–V loop")
+        axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[1].tick_params(axis='both', labelsize=label_size)
+
+
+        # Colorbars
+        sm_P = cm.ScalarMappable(cmap=cmap_C, norm=norm)
+        sm_P.set_array([])
+
+        sm_I = cm.ScalarMappable(cmap=cmap_td, norm=norm)
+        sm_I.set_array([])
+
+        cbar0 = fig.colorbar(sm_P, ax=axs[0], fraction=0.03, pad=0.04)
+        cbar0.set_label("Cycle number", fontsize=label_size)
+
+        cbar1 = fig.colorbar(sm_I, ax=axs[1], fraction=0.03, pad=0.04)
+        cbar1.set_label("Cycle number", fontsize=label_size)
+
         fig.subplots_adjust(right=0.90, wspace=0.55)
 
-    # Sauvegarde silencieuse
+    # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_CVM.png"
     plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
     plt.show()
-    plt.close('all')
-
+    plt.close("all")
 
 
 # ------------------------------------------------------------------------------
 
 def Plot_single_PUND(PUND_dataframe, Cycles_total, label_size, output_main_plot, base_name, metadata_dict_PUND):
-    # Stop si pas de mesure PUND
     if not metadata_dict_PUND.get("PUND_present", False):
         return
 
-    # --- Paramètres d’affichage ---
+    #To remove the breakdown point
+    Removal = len(Cycles_total) - len(PUND_dataframe)
+    Cycles_total = Cycles_total[:-Removal]
+
     legend_threshold = 15
     n_curves = len(PUND_dataframe)
-    use_legend = (n_curves <= legend_threshold)
+    use_legend = n_curves <= legend_threshold
 
-    # --- Figure avec 2 subplots ---
-    fig, axs = plt.subplots(1, 2, figsize=(18, 6))
+    # Figure commune aux deux cas
+    fig, axs = plt.subplots(1, 2, figsize=(22, 6))
     fig.suptitle(f"PUND - {base_name}", fontsize=label_size + 2, fontweight="bold")
 
-    # --- Colormaps personnalisés autour de TES couleurs actuelles ---
-    # P–V (à gauche) : vert/menthe ~ (0.35, 0.85, 0.65)
-    # I–V (à droite) : bleu clair     (0.45, 0.75, 0.85)
-    base_P = (0.35, 0.85, 0.65)
-    base_I = (0.45, 0.75, 0.85)
 
-    cmap_P = _truncate_cmap(cm.Greens,  minval=0.15, maxval=0.95)
-    cmap_I = _truncate_cmap(cm.Blues,  minval=0.15, maxval=0.95)
-
-    # --- Normalisation par numéro de cycle (linéaire; passe à LogNorm si tu veux) ---
-    vmin = float(np.min(Cycles_total))
-    vmax = float(np.max(Cycles_total))
-    norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
-
-    # --- Boucle sur les cycles ---
-    for i, j in enumerate(Cycles_total):
-        # 1) Récupère le DataFrame du cycle i
-        df0 = PUND_dataframe[i]
-
-        # 2) Si nombre de colonnes n'est pas multiple de 4, on retire la 1ʳᵉ (souvent un index importé)
-        df_work = df0 if (df0.shape[1] % 4 == 0) else df0.iloc[:, 1:]
-
-        # 3) Split en 5 pulses (ou n pulses) : renvoie une liste de DF avec colonnes ['Time','V','I','P']
-        df_list = PUND_collumn_splitter(df_work)
-
-        # 4) Couleurs par cycle (une couleur par axe, mappée via la valeur du cycle j)
-        color_P = cmap_P(norm(j))
-        color_I = cmap_I(norm(j))
-
-        # 5) Alpha constant (lisible) ; label mis UNE seule fois par cycle
-        alpha = 0.75
-        label_for_cycle = f"Cycle {j}" if use_legend else None
-        first_of_cycle = True
-
-        # 6) Traçage des pulses pour ce cycle (plusieurs curves par cycle)
-        for w in df_list:
-            lbl = label_for_cycle if first_of_cycle else None
-            axs[0].plot(w['V'], w['P'], color=color_P, alpha=alpha, label=lbl)
-            first_of_cycle = False
-
-        first_of_cycle = True
-        for w in df_list:
-            lbl = label_for_cycle if first_of_cycle else None
-            axs[1].plot(w['V'], w['I'], color=color_I, alpha=alpha, label=lbl)
-            first_of_cycle = False
-
-    # --- Styles des axes ---
-    axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
-    axs[0].set_title("P–V loop")
-    axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[0].tick_params(axis='both', labelsize=label_size)
-
-    axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
-    axs[1].set_ylabel("Current [A]", fontsize=label_size)
-    axs[1].set_title("I–V loop")
-    axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-    axs[1].tick_params(axis='both', labelsize=label_size)
-
-    # --- Légende (≤ 25) ou 2 colorbars (> 25) ---
     if use_legend:
-        # Légende globale dédoublonnée
-        handles_left, labels_left = axs[0].get_legend_handles_labels()
-        by_label = dict(zip(labels_left, handles_left))
-        fig.legend(
-            handles=list(by_label.values()),
-            labels=list(by_label.keys()),
-            loc="center left",
-            bbox_to_anchor=(1.02, 0.5),
-            borderaxespad=0,
-            fontsize=label_size - 2,
-            title="Cycles"
-        )
-        fig.subplots_adjust(right=0.86, wspace=0.55)
+        # --------- MODE "PEU DE COURBES" : COULEURS FIXES + ALPHA CROISSANT ---------
+        base_color_P = (0.35, 0.75, 0.45)  # vert P–V
+        base_color_I = (0.45, 0.45, 0.75)  # bleu I–V
+        alpha_list = np.linspace(0.25, 1.0, n_curves)
+
+        for i, cycle in enumerate(Cycles_total):
+
+            df0 = PUND_dataframe[i]
+            df_work = df0 if (df0.shape[1] % 4 == 0) else df0.iloc[:, 1:]
+            df_list = PUND_collumn_splitter(df_work)
+
+            alpha = float(alpha_list[i])
+            label = f"Cycle {cycle}"
+            label_for_cycle = f"Cycle {i}"
+
+            first_of_cycle = True
+            for w in df_list:
+                lbl = label_for_cycle if first_of_cycle else None
+                axs[0].plot(w['V'], w['P'], color=base_color_P, alpha=alpha, label=label)
+                first_of_cycle = False
+
+            first_of_cycle = True
+            for w in df_list:
+                lbl = label_for_cycle if first_of_cycle else None
+                axs[1].plot(w['V'], w['I'], color=base_color_I, alpha=alpha, label=label)
+                first_of_cycle = False
+
+
+        # --- Styles des axes ---
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
+        axs[0].set_title("P–V loop")
+        axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[0].tick_params(axis='both', labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("Current [A]", fontsize=label_size)
+        axs[1].set_title("I–V loop")
+        axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[1].tick_params(axis='both', labelsize=label_size)
+
+
+        # Légendes à droite de chaque subplot (sans doublons)
+        for ax in axs:
+            handles, labels = ax.get_legend_handles_labels()
+            by_label = dict(zip(labels, handles))
+
+            ax.legend(
+                handles=list(by_label.values()),
+                labels=list(by_label.keys()),
+                loc="center left",
+                bbox_to_anchor=(1.02, 0.5),
+                borderaxespad=0,
+                fontsize=label_size - 2,
+                title="Cycles",
+            )
+
+        fig.subplots_adjust(right=0.85, wspace=0.55)
 
     else:
+        # --- Colormaps personnalisés autour de TES couleurs actuelles ---
+        # P–V (à gauche) : vert/menthe ~ (0.35, 0.85, 0.65)
+        # I–V (à droite) : bleu clair     (0.45, 0.75, 0.85)
+        base_P = (0.35, 0.85, 0.65)
+        base_I = (0.45, 0.75, 0.85)
+
+        cmap_P = _truncate_cmap(cm.Greens,  minval=0.15, maxval=0.95)
+        cmap_I = _truncate_cmap(cm.Purples,  minval=0.15, maxval=0.95)
+
+        # --- Normalisation par numéro de cycle (linéaire; passe à LogNorm si tu veux) ---
+        vmin = float(np.min(Cycles_total))
+        vmax = float(np.max(Cycles_total))
+        norm = mcolors.LogNorm(vmin=max(vmin, 1e-3), vmax=vmax)
+
+        # --- Boucle sur les cycles ---
+        for i, j in enumerate(Cycles_total):
+            # 1) Récupère le DataFrame du cycle i
+            df0 = PUND_dataframe[i]
+
+            # 2) Si nombre de colonnes n'est pas multiple de 4, on retire la 1ʳᵉ (souvent un index importé)
+            df_work = df0 if (df0.shape[1] % 4 == 0) else df0.iloc[:, 1:]
+
+            # 3) Split en 5 pulses (ou n pulses) : renvoie une liste de DF avec colonnes ['Time','V','I','P']
+            df_list = PUND_collumn_splitter(df_work)
+
+            # 4) Couleurs par cycle (une couleur par axe, mappée via la valeur du cycle j)
+            color_P = cmap_P(norm(j))
+            color_I = cmap_I(norm(j))
+
+            # 5) Alpha constant (lisible) ; label mis UNE seule fois par cycle
+            alpha = 0.75
+            label_for_cycle = f"Cycle {j}" if use_legend else None
+            first_of_cycle = True
+
+            # 6) Traçage des pulses pour ce cycle (plusieurs curves par cycle)
+            for w in df_list:
+                lbl = label_for_cycle if first_of_cycle else None
+                axs[0].plot(w['V'], w['P'], color=color_P, alpha=alpha, label=lbl)
+                first_of_cycle = False
+
+            first_of_cycle = True
+            for w in df_list:
+                lbl = label_for_cycle if first_of_cycle else None
+                axs[1].plot(w['V'], w['I'], color=color_I, alpha=alpha, label=lbl)
+                first_of_cycle = False
+
+        # --- Styles des axes ---
+        axs[0].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[0].set_ylabel("Polarization (μC/cm²)", fontsize=label_size)
+        axs[0].set_title("P–V loop")
+        axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[0].tick_params(axis='both', labelsize=label_size)
+
+        axs[1].set_xlabel("Voltage [V]", fontsize=label_size)
+        axs[1].set_ylabel("Current [A]", fontsize=label_size)
+        axs[1].set_title("I–V loop")
+        axs[1].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
+        axs[1].tick_params(axis='both', labelsize=label_size)
+
         # Deux colorbars séparées (vert pour P–V, bleu pour I–V)
         sm_P = cm.ScalarMappable(cmap=cmap_P, norm=norm)
         sm_P.set_array([])
@@ -605,12 +722,11 @@ def Plot_single_PUND(PUND_dataframe, Cycles_total, label_size, output_main_plot,
 
         fig.subplots_adjust(right=0.90, wspace=0.55)
 
-    # --- Sauvegarde silencieuse ---
+    # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_PUND.png"
-    outpath = os.path.join(output_main_plot, filename)
-    plt.savefig(outpath, dpi=300, bbox_inches="tight")
-    plt.show()  # si tu veux visualiser dans le notebook, décommente
-    plt.close('all')
+    plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
+    plt.show()
+    plt.close("all")
 
 
 def PUND_collumn_splitter(df):
