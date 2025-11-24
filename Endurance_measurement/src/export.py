@@ -33,7 +33,10 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
             elif key == "DHM_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 
@@ -71,7 +74,10 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
             elif key == "CVM_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 
@@ -109,7 +115,10 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
             elif key == "PUND_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 
@@ -158,7 +167,10 @@ def export_csv_DHM(Dataframe, metadata_dict_DHM, output_path, base_name):
             elif key == "DHM_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 
@@ -203,7 +215,10 @@ def export_csv_CVM(Dataframe, metadata_dict_CVM, output_path, base_name):
             elif key == "CVM_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 
@@ -248,7 +263,10 @@ def export_csv_PUND(Dataframe, metadata_dict_PUND, output_path, base_name):
             elif key == "PUND_number":
                 value_tab = f"{key}\t{value}"
             else:
-                value_tab = value.replace(":","\t")
+                if value is None:
+                    value_tab = "NA"
+                else:
+                    value_tab = value.replace(":","\t")
 
             if value_tab is not None:
                 values_list.append(value_tab) 

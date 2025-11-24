@@ -430,28 +430,61 @@ def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, met
     ]
 
 
-    if metadata_dict_DHM["DHM_present"] is True:
-        df_fatigue_DHM = data_frame_fatigue[cols_DHM].copy()
-        if point_removal > 0:
-            df_fatigue_DHM = df_fatigue_DHM.iloc[:-point_removal]
-    else:
-        df_fatigue_DHM = pd.DataFrame()  # empty DataFrame if DHM not present
+   # --- Little function that helps in case a collumn is missing, sometimes it happen with the FE tester ---
+    def _safe_subset(df, cols, present_flag, label, point_removal):
+        """
+        Retourne un DF avec seulement les colonnes existantes.
+        Ne plante pas si certaines colonnes manquent.
+        """
+        if not present_flag:
+            return pd.DataFrame()
 
-    if metadata_dict_CVM["CVM_present"] is True:
-        df_fatigue_CVM = data_frame_fatigue[cols_CVM].copy()
-        if point_removal > 0:
-            df_fatigue_CVM = df_fatigue_CVM.iloc[:-point_removal]
-    else:
-        df_fatigue_CVM = pd.DataFrame()  # empty DataFrame if CVM not present
+        existing_cols = [c for c in cols if c in df.columns]
+        missing_cols = [c for c in cols if c not in df.columns]
 
-    if metadata_dict_PUND["PUND_present"] is True:
-        df_fatigue_PUND = data_frame_fatigue[cols_PUND].copy()
-        if point_removal > 0:
-            df_fatigue_PUND = df_fatigue_PUND.iloc[:-point_removal]
-    else:
-        df_fatigue_PUND = pd.DataFrame()  # empty DataFrame if PUND not present
+        if missing_cols:
+            print(
+                f"[fatigue_dataframe_extraction] WARNING: "
+                f"missing {label} columns: {missing_cols}"
+            )
 
+        if not existing_cols:
+            # Rien d'exploitable pour ce bloc
+            return pd.DataFrame()
+
+        sub = df[existing_cols].copy()
+
+        if point_removal > 0 and len(sub) > point_removal:
+            sub = sub.iloc[:-point_removal]
+
+        return sub
     
+    # --- Apply safe extraction for each block ---
+
+    df_fatigue_DHM = _safe_subset(
+        data_frame_fatigue,
+        cols_DHM,
+        metadata_dict_DHM.get("DHM_present", False),
+        "DHM",
+        point_removal,
+    )
+
+    df_fatigue_CVM = _safe_subset(
+        data_frame_fatigue,
+        cols_CVM,
+        metadata_dict_CVM.get("CVM_present", False),
+        "CVM",
+        point_removal,
+    )
+
+    df_fatigue_PUND = _safe_subset(
+        data_frame_fatigue,
+        cols_PUND,
+        metadata_dict_PUND.get("PUND_present", False),
+        "PUND",
+        point_removal,
+    )
+
     return df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, Cycles_total
 
 
