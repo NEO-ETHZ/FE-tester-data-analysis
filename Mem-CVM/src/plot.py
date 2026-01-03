@@ -6,7 +6,7 @@ import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
 import matplotlib.cm as cm
 
-from src.metadata_utils import get_capacitance_near_zero_bias
+from src.metadata_utils import get_capacitance_near_target_bias, mobile_average, seq_file_parsing
 
 def plot_memCVM_overview(
     Main_CVM_Dataframe: pd.DataFrame,
@@ -104,8 +104,8 @@ def plot_memCVM_overview(
 
 def plot_memCVM_Vwrite(
     Read_CVM_Dataframe: list[pd.DataFrame],
-    title: str | None = "Memory Capacitance vs Writing Voltage",
-    marker_size: int = 80
+    marker_size: int = 80,
+    reading_voltage: float = 0,
 ):
 
     # --- Récupération des valeurs ---
@@ -114,7 +114,7 @@ def plot_memCVM_Vwrite(
 
     for df in Read_CVM_Dataframe:
         Vw = float(df["Writing_Voltage_V"].iloc[0])
-        Cv = float(get_capacitance_near_zero_bias(df))
+        Cv = float(get_capacitance_near_target_bias(df,target=reading_voltage))
 
         Vwrites.append(Vw)
         Caps.append(Cv)
@@ -188,8 +188,8 @@ def plot_memCVM_Vwrite(
     ax.set_xlabel("Writing Voltage [V]", fontsize=12)
     ax.set_ylabel("Memory Capacitance near 0V [F]", fontsize=12)
 
-    if title:
-        ax.set_title(title, fontsize=14, fontweight="bold")
+    title = f"Memory Capacitance vs Writing Voltage for Vr: {reading_voltage*1E+3} [mV]"
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
     ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.6)
     ax.tick_params(axis="both", labelsize=11)
@@ -216,8 +216,8 @@ def plot_memCVM_Vwrite(
 def plot_memCVM_vs_pulse_number(
     Read_CVM_Dataframe: List[pd.DataFrame],
     Vwrite_list: list[float],
-    title: str | None = "Memory Capacitance vs Pulse Number",
     marker_size: int = 80,
+    reading_voltage: float = 0,
 ):
 
     if len(Read_CVM_Dataframe) == 0:
@@ -233,7 +233,7 @@ def plot_memCVM_vs_pulse_number(
     Vwrite_list = []
 
     for idx, (df, v) in enumerate(zip(dfs_sorted, vwrite_sorted), start=1):
-        Cmem = float(get_capacitance_near_zero_bias(df))
+        Cmem = float(get_capacitance_near_target_bias(df, reading_voltage))
 
         pulse_numbers.append(idx)
         Cmem_list.append(Cmem)
@@ -282,8 +282,8 @@ def plot_memCVM_vs_pulse_number(
     ax.set_xlabel("Pulse number (sequence index)", fontsize=12)
     ax.set_ylabel("Memory capacitance near 0 V [F]", fontsize=12)
 
-    if title:
-        ax.set_title(title, fontsize=14, fontweight="bold")
+    title = f"Memory Capacitance vs Pulse Number at Vr: {reading_voltage*1E+3} [mV]"
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
     ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.6)
     ax.tick_params(axis="both", labelsize=11)
@@ -309,6 +309,8 @@ def Dashboard_memCVM(
     Main_CVM_Dataframe: pd.DataFrame,
     Read_CVM_Dataframe: List[pd.DataFrame],
     Vwrite_list: list[float],
+    reading_voltage: float,
+    path_metadata: str = "",
     ):
 
     fig = plt.figure(figsize=(14, 10))
@@ -321,11 +323,14 @@ def Dashboard_memCVM(
     # =========================
 
     top_font_size = 14
+    color_main_plot = "#D11644"
     top_xlabel = "Bias [V]"
     top_ylabel = "Capacitance [F]"
 
+    df_mobile_average = mobile_average(3, df_temp["C [F]"])
+
     Top_plot = fig.add_subplot(gs[0, :])
-    Top_plot.plot(df_temp["Bias [V]"], df_temp["C [F]"], label="Main CVM", linewidth=2.5, color=(0.95,0.25,0.35))
+    Top_plot.plot(df_temp["Bias [V]"], df_mobile_average, label="Main CVM", linewidth=2.5, color=color_main_plot)
 
     # === Plotting and colorbar legend ===
     vmin = min(Vwrite_list)
@@ -369,7 +374,7 @@ def Dashboard_memCVM(
     left_font_size = 14
     left_xlabel = "Writting Voltage [V]"
     left_ylabel = "Capacitance near 0 V [F]"
-    color_left_plot = "#B01717"
+    color_left_plot = "#D11644"
 
     Left_plot = fig.add_subplot(gs[1:, 0])
   
@@ -380,7 +385,7 @@ def Dashboard_memCVM(
 
     for df in Read_CVM_Dataframe:
         Vw = float(df["Writing_Voltage_V"].iloc[0])
-        Cv = float(get_capacitance_near_zero_bias(df))
+        Cv = float(get_capacitance_near_target_bias(df, target=reading_voltage))
 
         Vwrites.append(Vw)
         Caps.append(Cv)
@@ -422,7 +427,7 @@ def Dashboard_memCVM(
     Vwrite_list = []
 
     for idx, (df, v) in enumerate(zip(dfs_sorted, vwrite_sorted), start=1):
-        Cmem = float(get_capacitance_near_zero_bias(df))
+        Cmem = float(get_capacitance_near_target_bias(df,target=reading_voltage))
 
         pulse_numbers.append(idx)
         Cmem_list.append(Cmem)
@@ -481,16 +486,18 @@ def Dashboard_memCVM(
     # =========================
     Right_02_text = fig.add_subplot(gs[2, 1])
     Right_02_text.axis("off")
+    metadata = seq_file_parsing(path_metadata)
 
     text = (
-        f"Dashboard Mem-CVM\n"
-        f"------------------------\n"
+        f"Reading Voltage: {reading_voltage*1E+3} [mV]\n"
         f"Number of memCVM read curves: {len(Read_CVM_Dataframe)}\n"
         f"Writing Voltages range: {min(Vwrite_list):.3g} V to {max(Vwrite_list):.3g} V\n"
         f"\n"
-        f"Memory Capacitance near 0 V:\n"
-        f" - Min: {min(Cmem_list):.3e} F\n"
-        f" - Max: {max(Cmem_list):.3e} F\n"
+        f"Memory Capacitance window: {((max(Cmem_list) - min(Cmem_list))*1E+12):.4g} [pF] \n"
+        f"ON/OFF ratio: {(max(Cmem_list)/min(Cmem_list)):.3g}\n"
+        f"Reading Voltage window: {((min(Read_CVM_Dataframe[0]["Bias [V]"]))*1E+3):.4g} --> {((max(Read_CVM_Dataframe[0]["Bias [V]"]))*1E+3):.4g} [mV]\n"
+        f"Reading point: {len(Read_CVM_Dataframe[0]["Bias [V]"])}\n"
+        f"Small signal frequency: {metadata["SS_Frequency_Hz"][0]} [Hz]\n"
     )
 
     tb_text = Right_02_text.text(

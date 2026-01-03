@@ -4,9 +4,81 @@ import re
 import os
 from typing import List, Tuple
 
+import pandas as pd
+import re
+
+
+def find_seq_file(path):
+    """
+    Trouve le fichier .seq dans le même dossier que le fichier CVM donné.
+    Retourne le chemin complet du fichier .seq ou None si non trouvé.
+    """
+    for file in os.listdir(path):
+        if file.endswith('.seq'):
+            return os.path.join(path, file)
+    return None
+
+def seq_file_parsing(path):
+
+    path_seq_file = find_seq_file(path)
+
+    if path_seq_file is None:
+        raise FileNotFoundError("Fichier .seq introuvable dans le même dossier que les fichiers CVM.")
+    
+    with open(path_seq_file, 'r') as f:
+        # On utilise splitlines() pour boucler sur chaque ligne du fichier 
+        lines = f.read().splitlines()
+
+    # Dictionnaire pour stocker les valeurs propres
+    data = {}
+
+    # Fonction interne pour extraire proprement le nombre ou le texte entre les ":"
+    def clean_val(raw_line):
+        try:
+            # On sépare par ":" et on prend l'élément du milieu (la valeur) 
+            val = raw_line.split(':')[1].strip()
+            # On essaie de convertir en float si c'est numérique
+            return float(val)
+        except (ValueError, IndexError):
+            # Si échec (ex: "staircase"), on retourne le texte brut nettoyé
+            return val if 'val' in locals() else None
+
+    # On parcourt les lignes
+    for line in lines:
+        if "Rise time:" in line: 
+            data["Rise_time_s"] = clean_val(line)
+        elif "Area:" in line: 
+            data["Area_um2"] = clean_val(line)
+        elif "Thickness:" in line: 
+            data["Thickness_nm"] = clean_val(line)
+        elif "Small-signal amplitude:" in line: 
+            data["SS_Amplitude_V"] = clean_val(line)
+        elif "Small-signal frequency:" in line: 
+            data["SS_Frequency_Hz"] = clean_val(line)
+        elif "Mode:" in line: 
+            data["Mode"] = clean_val(line)
+        elif "Amplitude:" in line: 
+            data["Amplitude_V"] = clean_val(line)
+        elif "Points:" in line: 
+            data["Points"] = clean_val(line)
+        elif "Integration:" in line: 
+            data["Integration"] = clean_val(line)
+        elif "Unipolar:" in line: 
+            data["Unipolar"] = clean_val(line)
+        elif "Prepol:" in line: 
+            data["Prepol"] = clean_val(line)
+        elif "Frequency:" in line: 
+            data["Frequency_Hz"] = clean_val(line)
+
+    # Création du DataFrame (index [0] car c'est une seule ligne de données)
+    df = pd.DataFrame([data])
+    
+    return df
+
+
 def extract_CVM_dataframe(CVM_file: str) -> pd.DataFrame:
     """
-    Extrait le tableau Bias–C–tan(delta) du fichier CVM .dat.
+    Extrait le tableau Bias-C-tan(delta) du fichier CVM .dat.
     Ignore :
       - le bloc CVResult
       - les métadonnées
@@ -135,15 +207,33 @@ def sort_memcvm_dfs(dfs: List[pd.DataFrame]) -> Tuple[List[pd.DataFrame], List[f
 
 
 
-def get_capacitance_near_zero_bias(df: pd.DataFrame) -> float:
+def get_capacitance_near_target_bias(df: pd.DataFrame, target: float) -> float:
     """
-    Retourne la valeur de la capacitance (C [F]) la plus proche de Bias = 0 V.
+    Retourne la valeur de la capacitance (C [F]) la plus proche de Bias = target V.
     """
     if "Bias [V]" not in df.columns or "C [F]" not in df.columns:
         raise KeyError("Colonnes 'Bias [V]' ou 'C [F]' absentes du DataFrame.")
+    if target > max(df["Bias [V]"]):
+        raise ValueError("The target value is higher than the maximum reading bias voltage, decrease the value of the target.")
+    if target < min(df["Bias [V]"]):
+        raise ValueError("The target value is lower than the minimum reading bias voltage, increase the value of the target.")
 
-    # Trouver l'index où Bias est le plus proche de 0
-    idx_closest = (df["Bias [V]"] - 0).abs().idxmin()
+    # Trouver l'index où Bias est le plus proche de la target
+    idx_closest = (df["Bias [V]"] - target).abs().idxmin()
 
     capacitance = df.at[idx_closest, "C [F]"]
     return capacitance
+
+
+
+
+def mobile_average(window: int, Dataframe: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calcule la moyenne mobile pour toutes les colonnes numériques du DataFrame.
+    """
+    # On applique le calcul uniquement sur les colonnes numériques
+    # .rolling(window) crée une fenêtre glissante
+    # .mean() calcule la moyenne de cette fenêtre
+    df_result = Dataframe.rolling(window=window,min_periods=1).mean()
+    
+    return df_result
