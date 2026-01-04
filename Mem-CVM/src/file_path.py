@@ -37,6 +37,15 @@ def filter_cvm_files(files: list) -> dict:
     return mem_files, main_files
 
 
+def find_seq_file(path):
+    """
+    Trouve le fichier .seq dans le même dossier que le fichier CVM donné.
+    Retourne le chemin complet du fichier .seq ou None si non trouvé.
+    """
+    for file in os.listdir(path):
+        if file.endswith('.seq'):
+            return os.path.join(path, file)
+    return None
 
 
 

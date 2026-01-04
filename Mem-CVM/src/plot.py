@@ -313,8 +313,23 @@ def Dashboard_memCVM(
     path_metadata: str = "",
     ):
 
-    fig = plt.figure(figsize=(14, 10))
+    #Gathering the metadata from the .seq file
+    metadata = seq_file_parsing(path_metadata)
+
+    fig = plt.figure(figsize=(15, 11))
     gs = gridspec.GridSpec(3, 2, height_ratios=[1.4, 1.0, 1.0], hspace=0.35, wspace=0.25)
+
+    sample_name = metadata["Name"][0]
+    read_mv = reading_voltage * 1e3
+
+    fig.suptitle(
+        f"Mem-CVM Dashboard — {sample_name} | {read_mv:.1f} mV Read",
+        fontsize=18,
+        fontweight="semibold",
+        y=0.955,
+    )
+    fig.subplots_adjust(top=0.925)
+
 
     df_temp = Main_CVM_Dataframe
 
@@ -331,6 +346,11 @@ def Dashboard_memCVM(
 
     Top_plot = fig.add_subplot(gs[0, :])
     Top_plot.plot(df_temp["Bias [V]"], df_mobile_average, label="Main CVM", linewidth=2.5, color=color_main_plot)
+    Top_plot.legend(
+        loc="upper right",
+        frameon=False,
+        fontsize=11
+    )
 
     # === Plotting and colorbar legend ===
     vmin = min(Vwrite_list)
@@ -357,14 +377,14 @@ def Dashboard_memCVM(
     cbar.set_label("Writing voltage Vwrite (V)", fontsize=12)
 
     # === Axes & style ===
-    Top_plot.grid(True, linestyle=":", linewidth=0.7, alpha=0.5)
+    Top_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Top_plot.tick_params(labelsize=11)
 
     Top_plot.set_xlabel(top_xlabel, fontsize=top_font_size)
     Top_plot.set_ylabel(top_ylabel, fontsize=top_font_size)
     Top_plot.tick_params(axis="both", labelsize=top_font_size)
-    Top_plot.grid(True)
-    Top_plot.legend()
+    Top_plot.spines["top"].set_visible(False)   #Remove the top border of the plot
+    Top_plot.spines["right"].set_visible(False)
 
 
     # =========================
@@ -390,14 +410,15 @@ def Dashboard_memCVM(
         Vwrites.append(Vw)
         Caps.append(Cv)
 
-    Left_plot.plot(Vwrites, Caps, marker='o', markersize=8, linestyle='-',label = "Mem-CVM", linewidth=2.0, color=color_left_plot, alpha=0.95)
-    Left_plot.grid(True, linestyle=":", linewidth=0.7, alpha=0.5)
+    Left_plot.plot(Vwrites, Caps, marker='o', markersize=6, linestyle='-',label = "Mem-CVM", linewidth=2.0, color=color_left_plot, alpha=0.95)
+    Left_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Left_plot.tick_params(labelsize=11)
 
     Left_plot.set_xlabel(left_xlabel, fontsize=left_font_size)
     Left_plot.set_ylabel(left_ylabel, fontsize=left_font_size)
     Left_plot.tick_params(axis="both", labelsize=top_font_size)
-    Left_plot.grid(True)
+    Left_plot.spines["top"].set_visible(False)
+    Left_plot.spines["right"].set_visible(False)
     Left_plot.legend()
 
 
@@ -470,8 +491,9 @@ def Dashboard_memCVM(
     # 4) Axes, style, titres
     Right_01_plot.set_xlabel(Right_01_plot_xlabel, fontsize=Right_01_plot_fontsize)
     Right_01_plot.set_ylabel(Right_01_plot_ylabel, fontsize=Right_01_plot_fontsize)
-
-    Right_01_plot.grid(True, linestyle=":", linewidth=0.7, alpha=0.6)
+    Right_01_plot.spines["top"].set_visible(False)
+    Right_01_plot.spines["right"].set_visible(False)
+    Right_01_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Right_01_plot.tick_params(axis="both", labelsize=11)
 
     Right_01_plot.legend(
@@ -486,24 +508,77 @@ def Dashboard_memCVM(
     # =========================
     Right_02_text = fig.add_subplot(gs[2, 1])
     Right_02_text.axis("off")
+
     metadata = seq_file_parsing(path_metadata)
 
+    # --- Raccourcis / formatage sûr ---
+    mode = metadata["Mode"][0]
+    rise_us = float(metadata["Rise_time_s"][0]) * 1e6
+    integration = metadata["Integration"][0]
+    amp_v = float(metadata["Amplitude_V"][0])
+    ss_f = float(metadata["SS_Frequency_Hz"][0])
+    ss_a = float(metadata["SS_Amplitude_V"][0])
+
+    read_mv = reading_voltage * 1e3
+    n_curves = len(Read_CVM_Dataframe)
+
+    vmin = min(Vwrite_list)
+    vmax = max(Vwrite_list)
+
+    bias_vec = Read_CVM_Dataframe[0]["Bias [V]"]
+    read_win_min_mv = float(bias_vec.min()) * 1e3
+    read_win_max_mv = float(bias_vec.max()) * 1e3
+    n_read_pts = len(bias_vec)
+
+    mem_window_pf = (max(Cmem_list) - min(Cmem_list)) * 1e12
+    on_off = max(Cmem_list) / min(Cmem_list)
+
+    # --- Texte structuré ---
     text = (
-        f"Reading Voltage: {reading_voltage*1E+3} [mV]\n"
-        f"Number of memCVM read curves: {len(Read_CVM_Dataframe)}\n"
-        f"Writing Voltages range: {min(Vwrite_list):.3g} V to {max(Vwrite_list):.3g} V\n"
+        f"Read voltage          : {read_mv:.1f} mV\n"
+        f"Read curves           : {n_curves:d}\n"
+        f"Vwrite range          : {vmin:.2f} → {vmax:.2f} V\n"
+        f"Pulse width (rise)    : {rise_us:.1f} µs\n"
         f"\n"
-        f"Memory Capacitance window: {((max(Cmem_list) - min(Cmem_list))*1E+12):.4g} [pF] \n"
-        f"ON/OFF ratio: {(max(Cmem_list)/min(Cmem_list)):.3g}\n"
-        f"Reading Voltage window: {((min(Read_CVM_Dataframe[0]["Bias [V]"]))*1E+3):.4g} --> {((max(Read_CVM_Dataframe[0]["Bias [V]"]))*1E+3):.4g} [mV]\n"
-        f"Reading point: {len(Read_CVM_Dataframe[0]["Bias [V]"])}\n"
-        f"Small signal frequency: {metadata["SS_Frequency_Hz"][0]} [Hz]\n"
+        f"Memory window         : {mem_window_pf:.2f} pF\n"
+        f"ON/OFF ratio          : {on_off:.3f}\n"
+        f"Read window           : {read_win_min_mv:.1f} → {read_win_max_mv:.1f} mV\n"
+        f"\n"
+        f"Mode                  : {mode}\n"
+        f"Read points           : {n_read_pts:d}\n"
+        f"Integration           : {integration}\n"
+        f"Amplitude             : {amp_v:.2f} V\n"
+        f"SS freq / amp         : {ss_f:.0f} Hz / {ss_a:.2f} V"
     )
 
+    # 1) Récupérer la position exacte du plot au-dessus (en coordonnées figure)
+    bbox = Right_01_plot.get_position()  # Bbox(x0, y0, x1, y1)
+
+    # 2) Créer un axe texte avec la même largeur (même x0 et même width)
+    text_height = 0.24   # ajuste si besoin (0.20–0.28 typiquement)
+    gap = 0.055           # petit espace entre plot et box
+
+    text_bottom = bbox.y0 - text_height - gap
+
+    Right_02_text = fig.add_axes([bbox.x0, text_bottom, bbox.width, text_height])
+    Right_02_text.axis("off")
+
+    # 3) Mettre le texte dans cet axe (coordonnées axes: 0→1)
     tb_text = Right_02_text.text(
         0.02, 0.98, text,
+        transform=Right_02_text.transAxes,
         va="top",
         ha="left",
         family="monospace",
-        fontsize=10
+        fontsize=12.5,
+        linespacing=1.25,
+        bbox=dict(
+            boxstyle="round,pad=0.5,rounding_size=0.2",
+            facecolor="white",
+            edgecolor="0.75",
+            linewidth=1.0,
+            alpha=0.95
+        )
     )
+
+

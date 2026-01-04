@@ -3,20 +3,9 @@ import pandas as pd
 import re
 import os
 from typing import List, Tuple
-
-import pandas as pd
-import re
+from src.file_path import find_seq_file
 
 
-def find_seq_file(path):
-    """
-    Trouve le fichier .seq dans le même dossier que le fichier CVM donné.
-    Retourne le chemin complet du fichier .seq ou None si non trouvé.
-    """
-    for file in os.listdir(path):
-        if file.endswith('.seq'):
-            return os.path.join(path, file)
-    return None
 
 def seq_file_parsing(path):
 
@@ -45,7 +34,9 @@ def seq_file_parsing(path):
 
     # On parcourt les lignes
     for line in lines:
-        if "Rise time:" in line: 
+        if "Name:" in line:
+            data["Name"] = clean_val(line)
+        elif "Rise time:" in line: 
             data["Rise_time_s"] = clean_val(line)
         elif "Area:" in line: 
             data["Area_um2"] = clean_val(line)
