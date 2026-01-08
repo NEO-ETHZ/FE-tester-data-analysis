@@ -34,7 +34,9 @@ def seq_file_parsing(path):
 
     # On parcourt les lignes
     for line in lines:
-        if "Name:" in line:
+        if "Date:" in line:
+            data["Date"] = clean_val(line)
+        elif "Name:" in line:
             data["Name"] = clean_val(line)
         elif "Rise time:" in line: 
             data["Rise_time_s"] = clean_val(line)
@@ -228,3 +230,102 @@ def mobile_average(window: int, Dataframe: pd.DataFrame) -> pd.DataFrame:
     df_result = Dataframe.rolling(window=window,min_periods=1).mean()
     
     return df_result
+
+
+
+
+def build_wide_dataframe_from_list(
+    Read_CVM_Dataframe: List[pd.DataFrame],
+    Vwrite_list: List[float],
+    v_col: str = "V",
+    c_col: str = "C",
+    vwrite_col_name: str = "Vwrite",
+    reset_index: bool = True,
+) -> pd.DataFrame:
+    """
+    Construit un DataFrame large de type :
+    [Vwrite_0, V_0, C_0, Vwrite_1, V_1, C_1, ...]
+    où Vwrite_list[i] correspond au sous-DataFrame Read_CVM_Dataframe[i].
+
+    - reset_index=True aligne par position (utile si les index diffèrent).
+    """
+
+    if len(Read_CVM_Dataframe) != len(Vwrite_list):
+        raise ValueError(
+            f"Longueurs incohérentes : {len(Read_CVM_Dataframe)=} vs {len(Vwrite_list)=}"
+        )
+
+    blocks = []
+
+    for i, (df, vwrite) in enumerate(zip(Read_CVM_Dataframe, Vwrite_list)):
+
+        if not isinstance(df, pd.DataFrame) or df.empty:
+            continue
+
+        if v_col not in df.columns or c_col not in df.columns:
+            raise KeyError(
+                f"Colonnes manquantes dans le sous-DF index {i}: "
+                f"attendues '{v_col}' et '{c_col}', trouvées {list(df.columns)}"
+            )
+
+        tmp = df[[v_col, c_col]].copy()
+
+        if reset_index:
+            tmp = tmp.reset_index(drop=True)
+
+        # Ajouter la colonne Vwrite à gauche
+        tmp.insert(0, vwrite_col_name, vwrite)
+
+        # Renommer pour rendre chaque bloc unique
+        tmp.columns = [f"{vwrite_col_name}_{i}", f"{v_col}_{i}", f"{c_col}_{i}"]
+
+        blocks.append(tmp)
+
+    if len(blocks) == 0:
+        return pd.DataFrame()
+
+    return pd.concat(blocks, axis=1)
+
+
+
+
+def write_csv_with_metadata(
+    Output_path: str,
+    df_metadata: pd.DataFrame,
+    df_data: pd.DataFrame,
+    sep: str = "\t"
+):
+    """
+    Écrit un CSV avec :
+    - metadata (clé \t valeur)
+    - ligne vide
+    - dataframe principal
+    """
+
+    os.makedirs(Output_path, exist_ok=True)
+    csv_name = f"{df_metadata["Date"][0]}_{df_metadata["Name"][0]}_memCVM_READ.csv"
+    Output_path = os.path.join(Output_path, csv_name)
+    
+
+    if df_metadata.shape[0] != 1:
+        raise ValueError("df_metadata doit contenir exactement une ligne")
+
+    with open(Output_path, "w", encoding="utf-8", newline="") as f:
+
+
+        # --- 1) Écriture des metadata ---
+        for key, value in df_metadata.iloc[0].items():
+            if pd.isna(value):
+                f.write(f"{key}{sep}\n")
+            else:
+                f.write(f"{key}{sep}{value}\n")
+
+        # --- 2) Ligne vide de séparation ---
+        f.write("\n")
+
+        # --- 3) Écriture du DataFrame principal ---
+        df_data.to_csv(
+            f,
+            sep=sep,
+            index=False
+        )
