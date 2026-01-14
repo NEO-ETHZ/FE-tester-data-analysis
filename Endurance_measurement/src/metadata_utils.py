@@ -625,7 +625,7 @@ def PUND_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_PUND
             if PUND_Table_check in str:
                 index_table.append(i)
 
-        #PUND is metadate + dataframe of every PUND loop
+        #PUND is metadata + dataframe of every PUND loop
         PUND = []
         for i, index in enumerate(index_table):
 

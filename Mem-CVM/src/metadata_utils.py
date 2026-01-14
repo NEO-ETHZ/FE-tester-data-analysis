@@ -4,6 +4,8 @@ import re
 import os
 from typing import List, Tuple
 from src.file_path import find_seq_file
+import numpy as np
+import pandas as pd
 
 
 
@@ -199,23 +201,40 @@ def sort_memcvm_dfs(dfs: List[pd.DataFrame]) -> Tuple[List[pd.DataFrame], List[f
 
 
 
-
-def get_capacitance_near_target_bias(df: pd.DataFrame, target: float) -> float:
+def get_capacitance_near_target_bias(
+    df: pd.DataFrame,
+    target: float,
+    bias_col: str = "Bias [V]",
+    cap_col: str = "C [F]",
+) -> float:
     """
-    Retourne la valeur de la capacitance (C [F]) la plus proche de Bias = target V.
+    Retourne la capacitance la plus proche de Bias = target.
+    Si la lecture CVM est incomplète, retourne np.nan.
     """
-    if "Bias [V]" not in df.columns or "C [F]" not in df.columns:
-        raise KeyError("Colonnes 'Bias [V]' ou 'C [F]' absentes du DataFrame.")
-    if target > max(df["Bias [V]"]):
-        raise ValueError("The target value is higher than the maximum reading bias voltage, decrease the value of the target.")
-    if target < min(df["Bias [V]"]):
-        raise ValueError("The target value is lower than the minimum reading bias voltage, increase the value of the target.")
 
-    # Trouver l'index où Bias est le plus proche de la target
-    idx_closest = (df["Bias [V]"] - target).abs().idxmin()
+    # Colonnes manquantes = bug de code → exception
+    if bias_col not in df.columns or cap_col not in df.columns:
+        raise KeyError(f"Colonnes '{bias_col}' ou '{cap_col}' absentes du DataFrame.")
 
-    capacitance = df.at[idx_closest, "C [F]"]
-    return capacitance
+    bias = df[bias_col].values
+    cap = df[cap_col].values
+
+    # DataFrame vide ou trop court
+    if len(bias) == 0:
+        return np.nan
+
+    # Target hors plage → mesure incomplète → NaN
+    if target > np.nanmax(bias) or target < np.nanmin(bias):
+        return np.nan
+
+    # Trouver le point le plus proche
+    idx_closest = np.nanargmin(np.abs(bias - target))
+
+    value = cap[idx_closest]
+
+    # Si la cap est NaN → on propage
+    return float(value) if np.isfinite(value) else np.nan
+
 
 
 

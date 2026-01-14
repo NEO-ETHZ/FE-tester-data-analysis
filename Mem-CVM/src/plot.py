@@ -35,7 +35,7 @@ def plot_memCVM_overview(
 
     df_temp = Main_CVM_Dataframe
 
-    top_font_size = 14
+    top_font_size = 16
     color_main_plot = "#D11644"
     top_xlabel = "Bias [V]"
     top_ylabel = "Capacitance [F]"
@@ -72,7 +72,8 @@ def plot_memCVM_overview(
     sm.set_array([])
 
     cbar = plt.colorbar(sm, ax=Top_plot, pad=0.02)
-    cbar.set_label("Writing voltage Vwrite (V)", fontsize=12)
+    cbar.ax.tick_params(labelsize=top_font_size)  # ajuste 14 à la taille souhaitée
+    cbar.set_label("Writing voltage Vwrite (V)", fontsize=top_font_size)
 
     # === Axes & style ===
     Top_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
@@ -114,10 +115,14 @@ def plot_memCVM_Vwrite(
 
         Vwrites.append(Vw)
         Caps.append(Cv)
+    
+    mask = np.isfinite(Caps) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
 
     # --- Conversion en numpy ---
     Vwrites = np.array(Vwrites)
+    Vwrites = Vwrites[mask]
     Caps = np.array(Caps)
+    Caps = Caps[mask]
 
     # --- Séparation des points ---
     pos_mask = Vwrites > 0
@@ -242,9 +247,15 @@ def plot_memCVM_vs_pulse_number(
         Cmem_list.append(Cmem)
         Vwrite_list.append(v)
 
+
+    mask = np.isfinite(Cmem_list) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
+
     pulse_numbers = np.array(pulse_numbers)
+    pulse_numbers = pulse_numbers[mask]
     Cmem_list = np.array(Cmem_list)
+    Cmem_list = Cmem_list[mask]
     Vwrite_list = np.array(Vwrite_list)
+    Vwrite_list = Vwrite_list[mask]
 
     # 3) Séparer positifs / négatifs pour la couleur
     pos_mask = Vwrite_list > 0
@@ -331,7 +342,7 @@ def Dashboard_memCVM(
     read_mv = reading_voltage * 1e3
 
     fig.suptitle(
-        f"Mem-CVM Dashboard — {sample_name} | {read_mv:.1f} mV Read",
+        f"Mem-CVM Dashboard — {sample_name}",
         fontsize=18,
         fontweight="semibold",
         y=0.955,
@@ -345,7 +356,7 @@ def Dashboard_memCVM(
     # Row 1 — full width
     # =========================
 
-    top_font_size = 14
+    top_font_size = 16
     color_main_plot = "#D11644"
     top_xlabel = "Bias [V]"
     top_ylabel = "Capacitance [F]"
@@ -354,11 +365,6 @@ def Dashboard_memCVM(
 
     Top_plot = fig.add_subplot(gs[0, :])
     Top_plot.plot(df_temp["Bias [V]"], df_mobile_average, label="Main CVM", linewidth=1.5, color=color_main_plot)
-    Top_plot.legend(
-        loc="upper right",
-        frameon=False,
-        fontsize=11
-    )
 
     # === Plotting and colorbar legend ===
     vmin = min(Vwrite_list)
@@ -382,24 +388,31 @@ def Dashboard_memCVM(
     sm.set_array([])
 
     cbar = plt.colorbar(sm, ax=Top_plot, pad=0.02)
-    cbar.set_label("Writing voltage Vwrite (V)", fontsize=12)
+    cbar.ax.tick_params(labelsize=top_font_size)  # ajuste 14 à la taille souhaitée
+    cbar.set_label("Writing voltage Vwrite (V)", fontsize=top_font_size)
 
     # === Axes & style ===
     Top_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Top_plot.tick_params(labelsize=11)
+    Top_plot.axvline(x=reading_voltage, color="#000000", linestyle="--", linewidth=1.0, alpha=0.25, label = f"Vr: {reading_voltage}V") # vertical line at reading voltage
 
     Top_plot.set_xlabel(top_xlabel, fontsize=top_font_size)
     Top_plot.set_ylabel(top_ylabel, fontsize=top_font_size)
     Top_plot.tick_params(axis="both", labelsize=top_font_size)
     Top_plot.spines["top"].set_visible(False)   #Remove the top border of the plot
     Top_plot.spines["right"].set_visible(False)
+    Top_plot.legend(
+        loc="upper right",
+        frameon=False,
+        fontsize=11
+    )
 
 
     # =========================
     # Rows 2–3 — left (merged)
     # =========================
 
-    left_font_size = 14
+    left_font_size = 16
     left_xlabel = "Writting Voltage [V]"
     left_ylabel = f"Capacitance near {reading_voltage} V [F]"
     color_left_plot = "#D11644"
@@ -417,14 +430,19 @@ def Dashboard_memCVM(
 
         Vwrites.append(Vw)
         Caps.append(Cv)
+    
+    Vwrites = np.array(Vwrites)
+    Caps = np.array(Caps)
 
-    Left_plot.plot(Vwrites, Caps, marker='o', markersize=3, linestyle='-',label = "Mem-CVM", linewidth=1.5, color=color_left_plot, alpha=0.95)
+    mask = np.isfinite(Caps) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
+
+    Left_plot.plot(Vwrites[mask], Caps[mask], marker='o', markersize=3, linestyle='-',label = "Mem-CVM", linewidth=1.5, color=color_left_plot, alpha=0.95)
     Left_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Left_plot.tick_params(labelsize=11)
 
     Left_plot.set_xlabel(left_xlabel, fontsize=left_font_size)
     Left_plot.set_ylabel(left_ylabel, fontsize=left_font_size)
-    Left_plot.tick_params(axis="both", labelsize=top_font_size)
+    Left_plot.tick_params(axis="both", labelsize=left_font_size)
     Left_plot.spines["top"].set_visible(False)
     Left_plot.spines["right"].set_visible(False)
     Left_plot.legend(frameon=False)
@@ -436,7 +454,7 @@ def Dashboard_memCVM(
 
     Right_01_plot_xlabel = "Pulse number (sequence index)"
     Right_01_plot_ylabel = f"Capacitance near {reading_voltage} V [F]"
-    Right_01_plot_fontsize = 14
+    Right_01_plot_fontsize = 16
     Right_01_plot_poscolor = "#0072B2"
     Right_01_plot_negcolor = "#D55E00"
     Right_01_plot_Markersize = 3
@@ -462,9 +480,15 @@ def Dashboard_memCVM(
         Cmem_list.append(Cmem)
         Vwrite_list.append(v)
 
+
+    mask = np.isfinite(Cmem_list) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
+
     pulse_numbers = np.array(pulse_numbers)
+    pulse_numbers = pulse_numbers[mask]
     Cmem_list = np.array(Cmem_list)
+    Cmem_list = Cmem_list[mask]
     Vwrite_list = np.array(Vwrite_list)
+    Vwrite_list = Vwrite_list[mask]
 
     # 3) Séparer positifs / négatifs pour la couleur
     pos_mask = Vwrite_list > 0
@@ -502,7 +526,7 @@ def Dashboard_memCVM(
     Right_01_plot.spines["top"].set_visible(False)
     Right_01_plot.spines["right"].set_visible(False)
     Right_01_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
-    Right_01_plot.tick_params(axis="both", labelsize=11)
+    Right_01_plot.tick_params(axis="both", labelsize=Right_01_plot_fontsize)
 
     Right_01_plot.legend(
         loc="best",
