@@ -57,6 +57,10 @@ def plot_memCVM_overview(
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
     cmap = cm.coolwarm   # très bien pour -V / +V
 
+
+    if len(Read_CVM_Dataframe) != len(Vwrite_list):
+        raise ValueError("Read_CVM_Dataframe et Vwrite_list n'ont pas la même longueur.") #Sanity check if not the same lenght 
+
     for df, v in zip(Read_CVM_Dataframe, Vwrite_list):
         color = cmap(norm(v))
 

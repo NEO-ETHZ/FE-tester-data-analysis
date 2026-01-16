@@ -2,7 +2,7 @@ import io
 import pandas as pd
 import re
 import os
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from src.file_path import find_seq_file
 import numpy as np
 import pandas as pd
@@ -121,16 +121,28 @@ def extract_CVM_dataframe(CVM_file: str) -> pd.DataFrame:
 def extract_read_CVM_dataframes(memCVM_files: list) -> list:
     """
     Extrait les dataframes des fichiers memCVM*.dat.
-    Retourne une liste de dataframes.
+    Retourne une liste de dataframes enrichis avec Writing_Voltage_V et Loop.
     """
 
     dataframes = []
+
     for file in memCVM_files:
         df = extract_CVM_dataframe(file)
-        Vw = extract_writing_voltage(file)
-        Vw = float(Vw)
 
-        df['Writing_Voltage_V'] = Vw
+        Vw = extract_writing_voltage(file)
+        loop_number = extract_loop_number(file)
+
+        if Vw is None:
+            raise ValueError(f"Impossible d'extraire le writing voltage depuis : {file}")
+
+        if loop_number is None:
+            print(f"Impossible d'extraire le loop number depuis : {file}")
+            df["Loop"] = None
+        else:
+            df["Loop"] = int(loop_number)
+
+        df["Writing_Voltage_V"] = float(Vw)
+
         dataframes.append(df)
 
     return dataframes
@@ -151,6 +163,24 @@ def extract_writing_voltage(filepath: str) -> float | None:
         return float(match.group(1))
     else:
         return None
+    
+
+
+def extract_loop_number(filepath: str) -> int | None:
+    """
+    Extrait le numéro de loop à partir d'un nom de fichier de type :
+    ..._loop-1.dat
+
+    Retourne un int (ex: 1) ou None si non trouvé.
+    """
+    filename = os.path.basename(filepath)
+
+    match = re.search(r'loop-(\d+)\.dat$', filename)
+    if match:
+        return int(match.group(1))
+    else:
+        return None
+
 
 
 def get_vwrite_from_df(df: pd.DataFrame) -> float:
@@ -168,36 +198,68 @@ def get_vwrite_from_df(df: pd.DataFrame) -> float:
 
 
 
-def sort_memcvm_dfs(dfs: List[pd.DataFrame]) -> Tuple[List[pd.DataFrame], List[float]]:
+def sort_memcvm_dfs(
+    dfs: List[pd.DataFrame]
+) -> Tuple[List[pd.DataFrame], List[float], List[Optional[int]]]:
     """
-    Trie les DataFrames memCVM selon leur Writing_Voltage_V :
+    Trie les DataFrames memCVM selon :
+      - Si Loop existe : Loop croissant puis Vwrite (positifs croissants puis négatifs par |V|)
+      - Si Loop absent : tri uniquement par Vwrite (même logique)
 
-      1) Tous les Vwrite > 0 : triés du plus petit au plus grand
-      2) Puis tous les Vwrite < 0 : triés du plus proche de 0 vers le plus négatif
-
-    Retourne (dfs_trié, liste_Vwrite_trié)
+    Retourne (dfs_sorted, vwrite_sorted, loop_sorted)
     """
-    # Construire liste de paires (df, Vwrite)
+
+    def vwrite_sort_key(v: float) -> tuple:
+        # positifs d'abord (croissant), puis négatifs (|v| croissant)
+        if v > 0:
+            return (0, v)
+        if v < 0:
+            return (1, abs(v))
+        return (0, 0)
+
+    def safe_get_loop(df: pd.DataFrame) -> Optional[int]:
+        if "Loop" not in df.columns:
+            return None
+        val = df["Loop"].iloc[0]
+        if pd.isna(val):
+            return None
+        try:
+            return int(val)
+        except (TypeError, ValueError):
+            return None
+
+    # Construire paires (df, loop, vwrite)
     pairs = []
     for df in dfs:
-        v = get_vwrite_from_df(df)
-        pairs.append((df, v))
+        v = float(get_vwrite_from_df(df))
+        loop = safe_get_loop(df)
+        pairs.append((df, loop, v))
 
-    pos = [p for p in pairs if p[1] > 0]
-    neg = [p for p in pairs if p[1] < 0]
+    has_loop = any(p[1] is not None for p in pairs)
 
-    # Positifs : 0.5 → 2.5
-    pos.sort(key=lambda x: x[1])
+    if not has_loop:
+        # Ancien format : on ignore loop
+        pairs_sorted = sorted(pairs, key=lambda x: vwrite_sort_key(x[2]))
+    else:
+        # Nouveau format : loop d'abord, puis vwrite
+        # Les df sans loop (None) seront mis à la fin
+        pairs_sorted = sorted(
+            pairs,
+            key=lambda x: (x[1] is None, x[1] if x[1] is not None else 10**9, vwrite_sort_key(x[2]))
+        )
 
-    # Négatifs : -0.5, -0.833, ..., -2.5  (du plus proche de 0 au plus extrême)
-    neg.sort(key=lambda x: abs(x[1]))
+    dfs_sorted = [p[0] for p in pairs_sorted]
+    vwrite_sorted = [p[2] for p in pairs_sorted]
+    loop_sorted = [p[1] for p in pairs_sorted]
 
-    ordered = pos + neg
+    return dfs_sorted, vwrite_sorted, loop_sorted
 
-    dfs_sorted = [p[0] for p in ordered]
-    vwrite_sorted = [p[1] for p in ordered]
 
-    return dfs_sorted, vwrite_sorted
+
+
+
+
+
 
 
 
