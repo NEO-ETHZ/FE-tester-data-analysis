@@ -4,325 +4,491 @@ import pandas as pd
 from typing import List
 import matplotlib.gridspec as gridspec
 import matplotlib.colors as mcolors
+from matplotlib.ticker import AutoMinorLocator, NullFormatter
 import matplotlib.cm as cm
 import os
-
+from src.metadata_utils import get_min_max_Voltage, get_min_max_Capacitance
 from src.metadata_utils import get_capacitance_near_target_bias, mobile_average, seq_file_parsing
+
 
 def plot_memCVM_overview(
     Main_CVM_Dataframe: pd.DataFrame,
     Read_CVM_Dataframe: list[pd.DataFrame],
     path_metadata: str,
-    Output_path: str,
+    Output_dir: str,
     reading_voltage: float,
     Vwrite_list: list[float],
     title: str | None = None,
+    filename_suffix: str = "Main-CVM",
 ):
-    #Gathering the metadata from the .seq file
+    """
+    Paper-friendly Mem-CVM overview plot:
+    - Main CVM curve (smoothed) + read curves colored by Vwrite
+    - Paper style: full frame, ticks inward, minor ticks, major+minor grid
+    - Colorbar for Vwrite
+    - High-res export
+    """
+
+    # =========================
+    # Metadata
+    # =========================
     metadata = seq_file_parsing(path_metadata)
-
-    fig = plt.figure(figsize=(12, 8))
-
     sample_name = metadata["Name"][0]
+    date_str = metadata["Date"][0]
     read_mv = reading_voltage * 1e3
 
-    fig.suptitle(
-        f"Mem-CVM — {sample_name} | {read_mv:.1f} mV Read",
-        fontsize=18,
-        fontweight="semibold",
-    )
-    fig.subplots_adjust(top=0.925)
+    # =========================
+    # Style constants
+    # =========================
+    FIGSIZE = (9, 6.0)          # paper-like (single panel)
+    LINEWIDTH_MAIN = 2.6
+    LINEWIDTH_READ = 1.2
 
+    LABEL_FONTSIZE = 18
+    TICK_FONTSIZE = 16
+    CBAR_FONTSIZE = 16
+
+    color_main_plot = "#000000"
+    xlabel = "Bias (V)"
+    ylabel = "Capacitance (pF)"
+
+    # =========================
+    # Figure
+    # =========================
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    # =========================
+    # Main curve (smoothed)
+    # =========================
     df_temp = Main_CVM_Dataframe
+    df_mobile_average = mobile_average(8, df_temp["C [F]"])
 
-    top_font_size = 16
-    color_main_plot = "#D11644"
-    top_xlabel = "Bias [V]"
-    top_ylabel = "Capacitance [F]"
-
-    df_mobile_average = mobile_average(5, df_temp["C [F]"])
-
-    Top_plot = fig.add_subplot()
-    Top_plot.plot(df_temp["Bias [V]"], df_mobile_average, label="Main CVM", linewidth=2.5, color=color_main_plot)
-    Top_plot.legend(
-        loc="upper right",
-        frameon=False,
-        fontsize=11
+    ax.plot(
+        df_temp["Bias [V]"],
+        df_mobile_average*1e+12,
+        label="Main CVM",
+        linewidth=LINEWIDTH_MAIN,
+        color=color_main_plot
     )
 
-    # === Plotting and colorbar legend ===
+    # =========================
+    # Read curves colored by Vwrite
+    # =========================
+    if len(Read_CVM_Dataframe) != len(Vwrite_list):
+        raise ValueError("Read_CVM_Dataframe and Vwrite_list must have the same length.")
+
     vmin = min(Vwrite_list)
     vmax = max(Vwrite_list)
 
     norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
-    cmap = cm.coolwarm   # très bien pour -V / +V
+    cmap = cm.coolwarm
 
+    for df_read, vwrite in zip(Read_CVM_Dataframe, Vwrite_list):
+        color = cmap(norm(vwrite))
 
-    if len(Read_CVM_Dataframe) != len(Vwrite_list):
-        raise ValueError("Read_CVM_Dataframe et Vwrite_list n'ont pas la même longueur.") #Sanity check if not the same lenght 
-
-    for df, v in zip(Read_CVM_Dataframe, Vwrite_list):
-        color = cmap(norm(v))
-
-        Top_plot.plot(
-            df["Bias [V]"],
-            df["C [F]"],
+        ax.plot(
+            df_read["Bias [V]"],
+            df_read["C [F]"]*1e+12,
             color=color,
-            linewidth=1,
-            linestyle="--"
+            linewidth=LINEWIDTH_READ,
+            linestyle=":",
+            alpha=0.95
         )
 
+    # Colorbar
     sm = cm.ScalarMappable(norm=norm, cmap=cmap)
     sm.set_array([])
 
-    cbar = plt.colorbar(sm, ax=Top_plot, pad=0.02)
-    cbar.ax.tick_params(labelsize=top_font_size)  # ajuste 14 à la taille souhaitée
-    cbar.set_label("Writing voltage Vwrite (V)", fontsize=top_font_size)
+    cbar = fig.colorbar(sm, ax=ax, pad=0.015)
+    cbar.ax.tick_params(labelsize=CBAR_FONTSIZE, direction="in", length=6, width=1.2)
+    cbar.set_label("Writing voltage $V_{write}$ (V)", fontsize=CBAR_FONTSIZE)
 
-    # === Axes & style ===
-    Top_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
-    Top_plot.tick_params(labelsize=11)
+    # =========================
+    # Paper axis style
+    # =========================
+    ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel(ylabel, fontsize=LABEL_FONTSIZE)
 
-    Top_plot.set_xlabel(top_xlabel, fontsize=top_font_size)
-    Top_plot.set_ylabel(top_ylabel, fontsize=top_font_size)
-    Top_plot.tick_params(axis="both", labelsize=top_font_size)
-    Top_plot.spines["top"].set_visible(False)   #Remove the top border of the plot
-    Top_plot.spines["right"].set_visible(False)
-
-    os.makedirs(Output_path, exist_ok=True)
-    plot_name = f"{metadata["Date"][0]}_{metadata["Name"][0]}_Main-CVM.png"
-    Output_path = os.path.join(Output_path, plot_name)
-    plt.savefig(Output_path, dpi=300)
+    # --- Zoom sur la zone lecture ---
+    ax.set_xlim(get_min_max_Voltage(Read_CVM_Dataframe))   # <-- à adapter à ta fenêtre de lecture réelle
+    Cmin, Cmax = get_min_max_Capacitance(Main_CVM_Dataframe, Read_CVM_Dataframe)
+    ax.set_ylim(Cmin*1e+12, Cmax*1e+12)
 
 
+    # ticks inward + top/right
+    ax.tick_params(
+        axis="both", which="both",
+        direction="in", top=True, right=True,
+        labelsize=TICK_FONTSIZE,
+        length=6, width=1.2
+    )
+    ax.tick_params(axis="both", which="minor", length=3, width=1.0)
 
-#----------------------------------------------------------------------
-#----------------------------------------------------------------------
+    # minor ticks
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+    # grid major+minor
+    ax.grid(True, which="major", linestyle="-", linewidth=0.8, alpha=0.30)
+    ax.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.22)
+
+    # full frame spines
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.2)
+
+    # Legend (boxed, clean)
+    leg = ax.legend(loc="best", fontsize=14, frameon=True)
+    leg.get_frame().set_linewidth(1.0)
+    leg.get_frame().set_alpha(1.0)
+
+    # =========================
+    # Export
+    # =========================
+    os.makedirs(Output_dir, exist_ok=True)
+
+    plot_name = f"{date_str}_{sample_name}_{filename_suffix}.png"
+    out_path = os.path.join(Output_dir, plot_name)
+
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=600, bbox_inches="tight")
+    plt.show()
+
+    return fig, ax, out_path
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def plot_memCVM_Vwrite(
     Read_CVM_Dataframe: list[pd.DataFrame],
     path_metadata: str = "",
-    Output_path: str = "",
-    marker_size: int = 80,
-    reading_voltage: float = 0,
+    Output_dir: str = "",
+    marker_size: int = 40,
+    reading_voltage: float = 0.0,
+    title: str | None = None,
 ):
-    metadata = seq_file_parsing(path_metadata)
+    """
+    Paper-friendly plot:
+    Memory capacitance (near reading_voltage) vs writing voltage.
+    Style matches the other 'paper' functions: full frame, ticks inward, minor ticks,
+    major+minor grid, boxed legend, high-res export.
+    """
 
-    # --- Récupération des valeurs ---
+    metadata = seq_file_parsing(path_metadata)
+    sample_name = metadata["Name"][0]
+    date_str = metadata["Date"][0]
+
+    # =========================
+    # Gather values
+    # =========================
     Vwrites = []
     Caps = []
 
     for df in Read_CVM_Dataframe:
         Vw = float(df["Writing_Voltage_V"].iloc[0])
-        Cv = float(get_capacitance_near_target_bias(df,target=reading_voltage))
-
+        Cv = float(get_capacitance_near_target_bias(df, target=reading_voltage))
         Vwrites.append(Vw)
         Caps.append(Cv)
-    
-    mask = np.isfinite(Caps) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
 
-    # --- Conversion en numpy ---
-    Vwrites = np.array(Vwrites)
+    Vwrites = np.asarray(Vwrites, dtype=float)
+    Caps = np.asarray(Caps, dtype=float)
+
+    # avoid NaNs/infs
+    mask = np.isfinite(Caps) & np.isfinite(Vwrites)
     Vwrites = Vwrites[mask]
-    Caps = np.array(Caps)
     Caps = Caps[mask]
 
-    # --- Séparation des points ---
+    # Conversion in pF
+    Caps = Caps*1e+12
+
+    # =========================
+    # Split positive / negative / zero
+    # =========================
     pos_mask = Vwrites > 0
     neg_mask = Vwrites < 0
-    zero_mask = Vwrites == 0   # on sait jamais
+    zero_mask = Vwrites == 0
 
-    # Couleurs
-    POS_COLOR = "#0072B2"  # Bleu
-    NEG_COLOR = "#D55E00"  # Orange
-    ZERO_COLOR = "gray"
+    POS_COLOR = "#285b96"
+    NEG_COLOR = "#8b1010"
+    ZERO_COLOR = "0.35"
 
-    fig, ax = plt.subplots(figsize=(9, 6))
+    # =========================
+    # Paper style constants
+    # =========================
+    FIGSIZE = (9.0, 6.0)
+    LINEWIDTH = 5
+    LABEL_FONTSIZE = 18
+    TICK_FONTSIZE = 16
+    LEGEND_FONTSIZE = 14
+    TITLE_FONTSIZE = 18
 
-    # === Courbe des Vwrite positifs ===
-    if np.any(pos_mask):
-        # Tri pour que la courbe soit dans le bon ordre croissant
-        idx_sorted = np.argsort(Vwrites[pos_mask])
+    # markersize in points
+    ms = float(marker_size) ** 0.5  # keep your behavior
 
-        ax.plot(
-            Vwrites[pos_mask][idx_sorted],
-            Caps[pos_mask][idx_sorted],
-            linestyle='-',
-            marker='o',
-            markersize=marker_size**0.5,
-            linewidth=2.0,
-            color=POS_COLOR,
-            alpha=0.95,
-            label="Positive Vwrite"
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    # =========================
+    # Plot curves
+    # =========================
+    ax.plot(
+        Vwrites, 
+        Caps, 
+        linestyle='-',
+        linewidth=0.8, 
+        color="#000000", 
+        alpha=0.65
+        )
+    ax.scatter(
+        Vwrites[pos_mask],
+        Caps[pos_mask],
+        marker="o",
+        s = marker_size,   # ajuste la taille visuelle
+        color=POS_COLOR,
+        label="Positive Vwrite",
+        zorder=10
+        )
+    ax.scatter(
+        Vwrites[neg_mask],
+        Caps[neg_mask],
+        marker="o",
+        s = marker_size,   # ajuste la taille visuelle
+        color=NEG_COLOR,
+        label="Negative Vwrite",
+        zorder=10
         )
 
-    # === Courbe des Vwrite négatifs ===
-    if np.any(neg_mask):
-        # Tri des négatifs (du plus proche de 0 vers le plus extrême)
-        idx_sorted = np.argsort(np.abs(Vwrites[neg_mask]))
-
-        ax.plot(
-            Vwrites[neg_mask][idx_sorted],
-            Caps[neg_mask][idx_sorted],
-            linestyle='-',
-            marker='o',
-            markersize=marker_size**0.5,
-            linewidth=2.0,
-            color=NEG_COLOR,
-            alpha=0.95,
-            label="Negative Vwrite"
-        )
-
-    # === Courbe pour Vwrite = 0 (si jamais) ===
-    if np.any(zero_mask):
-        ax.plot(
-            Vwrites[zero_mask],
-            Caps[zero_mask],
-            linestyle='-',
-            marker='o',
-            markersize=marker_size**0.5 + 2,
-            linewidth=2.0,
-            color=ZERO_COLOR,
-            alpha=1.0,
-            label="Vwrite = 0"
-        )
-
-
-    # === Style des axes ===
-    ax.set_xlabel("Writing Voltage [V]", fontsize=12)
-    ax.set_ylabel(f"Memory Capacitance near {reading_voltage} V [F]", fontsize=12)
-
-    title = f"Memory Capacitance vs Writing Voltage for Vr: {reading_voltage*1E+3} [mV]"
-    ax.set_title(title, fontsize=14, fontweight="bold")
-
-    ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.6)
-    ax.tick_params(axis="both", labelsize=11)
-
-    # === Légende ===
-    ax.legend(
-        loc="best",
-        frameon=False,
-        fontsize=10,
-        title_fontsize=11
+    # =========================
+    # Labels / title
+    # =========================
+    ax.set_xlabel("Writing voltage (V)", fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel(
+        f"Capacitance near {reading_voltage} V (pF)",
+        fontsize=LABEL_FONTSIZE
     )
 
-    os.makedirs(Output_path, exist_ok=True)
-    plot_name = f"{metadata["Date"][0]}_{metadata["Name"][0]}_CrvsVw.png"
-    Output_path = os.path.join(Output_path, plot_name)
-    plt.savefig(Output_path, dpi=300)
+    # =========================
+    # Paper ticks + grid
+    # =========================
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="in",
+        top=True,
+        right=True,
+        labelsize=TICK_FONTSIZE,
+        length=6,
+        width=1.2
+    )
+    ax.tick_params(axis="both", which="minor", length=3, width=1.0)
+
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+    ax.grid(True, which="major", linestyle="-", linewidth=0.8, alpha=0.30)
+    ax.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.22)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.2)
+
+
+    # =========================
+    # Export
+    # =========================
+    os.makedirs(Output_dir, exist_ok=True)
+    plot_name = f"{metadata['Date'][0]}_{metadata['Name'][0]}_{metadata['Device_ID'][0]}_Cmem_vs_Vwrite.png"
+    out_path = os.path.join(Output_dir, plot_name)
+
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=600, bbox_inches="tight")
+    plt.show()
+
+    return fig, ax, out_path
 
 
 
-
-#----------------------------------------------------------------------
-#----------------------------------------------------------------------
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 
 def plot_memCVM_vs_pulse_number(
-    Read_CVM_Dataframe: List[pd.DataFrame],
+    Read_CVM_Dataframe: list[pd.DataFrame],
     path_metadata: str,
-    Output_path: str,
+    Output_dir: str,
     Vwrite_list: list[float],
-    marker_size: int = 80,
-    reading_voltage: float = 0,
+    marker_size: int = 40,
+    reading_voltage: float = 0.0,
+    title: str | None = None,
 ):
-    
+    """
+    Paper-friendly plot:
+    Memory capacitance (near reading_voltage) vs pulse number,
+    colored by sign of Vwrite (pos/neg).
+    """
+
     metadata = seq_file_parsing(path_metadata)
+    sample_name = metadata["Name"][0]
+    date_str = metadata["Date"][0]
 
     if len(Read_CVM_Dataframe) == 0:
-        raise ValueError("Read_CVM_Dataframe est vide.")
+        raise ValueError("Read_CVM_Dataframe is empty.")
+    if len(Read_CVM_Dataframe) != len(Vwrite_list):
+        raise ValueError("Read_CVM_Dataframe and Vwrite_list must have the same length.")
 
-    dfs_sorted = Read_CVM_Dataframe
-    vwrite_sorted = Vwrite_list
-
-
-    # 2) Construire les listes pulse_number, Cmem et Vwrite
+    # =========================
+    # Build arrays
+    # =========================
     pulse_numbers = []
     Cmem_list = []
-    Vwrite_list = []
+    Vw_list = []
 
-    for idx, (df, v) in enumerate(zip(dfs_sorted, vwrite_sorted), start=1):
-        Cmem = float(get_capacitance_near_target_bias(df, reading_voltage))
-
+    for idx, (df, v) in enumerate(zip(Read_CVM_Dataframe, Vwrite_list), start=1):
+        Cmem = float(get_capacitance_near_target_bias(df, target=reading_voltage))
         pulse_numbers.append(idx)
         Cmem_list.append(Cmem)
-        Vwrite_list.append(v)
+        Vw_list.append(float(v))
 
+    pulse_numbers = np.asarray(pulse_numbers, dtype=float)
+    Cmem_list = np.asarray(Cmem_list, dtype=float)
+    Vw_list = np.asarray(Vw_list, dtype=float)
 
-    mask = np.isfinite(Cmem_list) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
-
-    pulse_numbers = np.array(pulse_numbers)
+    mask = np.isfinite(Cmem_list) & np.isfinite(Vw_list) & np.isfinite(pulse_numbers)
     pulse_numbers = pulse_numbers[mask]
-    Cmem_list = np.array(Cmem_list)
     Cmem_list = Cmem_list[mask]
-    Vwrite_list = np.array(Vwrite_list)
-    Vwrite_list = Vwrite_list[mask]
+    Vw_list = Vw_list[mask]
 
-    # 3) Séparer positifs / négatifs pour la couleur
-    pos_mask = Vwrite_list > 0
-    neg_mask = Vwrite_list < 0
+    # Conversion in pF
+    Cmem_list = Cmem_list*1e+12
 
-    POS_COLOR = "#0072B2"   # bleu
-    NEG_COLOR = "#D55E00"   # orange
+    # Split by sign
+    pos_mask = Vw_list > 0
+    neg_mask = Vw_list < 0
+    zero_mask = Vw_list == 0
 
-    fig, ax = plt.subplots(figsize=(9, 6))
+    # =========================
+    # Paper style
+    # =========================
+    FIGSIZE = (9.0, 6.0)
+    LINEWIDTH = 5
+    LABEL_FONTSIZE = 18
+    TICK_FONTSIZE = 16
+    LEGEND_FONTSIZE = 14
+    TITLE_FONTSIZE = 18
 
-    # === Positifs ===
+    ms = float(marker_size) ** 0.5
+
+    POS_COLOR = "#285b96"
+    NEG_COLOR = "#8b1010"
+    ZERO_COLOR = "0.35"
+
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    # =========================
+    # Plot
+    # =========================
+    # Points positifs
     if np.any(pos_mask):
-        ax.plot(
+        ax.scatter(
             pulse_numbers[pos_mask],
             Cmem_list[pos_mask],
             marker="o",
-            linestyle="-",
-            linewidth=1.8,
-            markersize=marker_size ** 0.5,
+            s=marker_size,   # ajuste la taille visuelle
             color=POS_COLOR,
             label="Positive Vwrite",
+            zorder=10
         )
 
-    # === Négatifs ===
+    # Points négatifs
     if np.any(neg_mask):
-        ax.plot(
+        ax.scatter(
             pulse_numbers[neg_mask],
             Cmem_list[neg_mask],
             marker="o",
-            linestyle="-",
-            linewidth=1.8,
-            markersize=marker_size ** 0.5,
+            s=marker_size,
             color=NEG_COLOR,
             label="Negative Vwrite",
+            zorder=10
         )
 
-    # 4) Axes, style, titres
-    ax.set_xlabel("Pulse number (sequence index)", fontsize=12)
-    ax.set_ylabel(f"Memory capacitance near {reading_voltage} V [F]", fontsize=12)
-
-    title = f"Memory Capacitance vs Pulse Number at Vr: {reading_voltage*1E+3} [mV]"
-    ax.set_title(title, fontsize=14, fontweight="bold")
-
-    ax.grid(True, linestyle=":", linewidth=0.7, alpha=0.6)
-    ax.tick_params(axis="both", labelsize=11)
-
-    ax.legend(
-        loc="best",
-        frameon=False,
-        fontsize=10,
-        title_fontsize=11,
+    # Option bonus : ligne très légère qui suit TOUTE la séquence (souvent joli)
+    ax.plot(
+        pulse_numbers,
+        Cmem_list,
+        color="#000000",
+        alpha=0.65,
+        linewidth=0.8,
+        zorder=1
     )
 
-    os.makedirs(Output_path, exist_ok=True)
-    plot_name = f"{metadata["Date"][0]}_{metadata["Name"][0]}_CrvsPulse.png"
-    Output_path = os.path.join(Output_path, plot_name)
-    plt.savefig(Output_path, dpi=300)
+    # =========================
+    # Labels / title
+    # =========================
+    ax.set_xlabel("Pulse number (sequence index)", fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel(
+        f"Capacitance near {reading_voltage} V (pF)",
+        fontsize=LABEL_FONTSIZE
+    )
+
+    # =========================
+    # Paper ticks + grid
+    # =========================
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="in",
+        top=True,
+        right=True,
+        labelsize=TICK_FONTSIZE,
+        length=6,
+        width=1.2
+    )
+    ax.tick_params(axis="both", which="minor", length=3, width=1.0)
+
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+    ax.grid(True, which="major", linestyle="-", linewidth=0.8, alpha=0.30)
+    ax.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.22)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.2)
+
+    # =========================
+    # Legend (boxed, clean)
+    # =========================
+    leg = ax.legend(loc="best", fontsize=LEGEND_FONTSIZE, frameon=True)
+    leg.get_frame().set_linewidth(1.0)
+    leg.get_frame().set_alpha(1.0)
+
+
+    # =========================
+    # Export
+    # =========================
+    os.makedirs(Output_dir, exist_ok=True)
+    plot_name = f"{metadata['Date'][0]}_{metadata['Name'][0]}_{metadata['Device_ID'][0]}_Cmem_vs_pulse.png"
+    out_path = os.path.join(Output_dir, plot_name)
+
+    plt.tight_layout()
+    fig.savefig(out_path, dpi=600, bbox_inches="tight")
+    plt.show()
+
+    return fig, ax, out_path
 
 
 
-
-#----------------------------------------------------------------------
-#----------------------------------------------------------------------
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 
@@ -339,19 +505,21 @@ def Dashboard_memCVM(
     #Gathering the metadata from the .seq file
     metadata = seq_file_parsing(path_metadata)
 
-    fig = plt.figure(figsize=(15, 11))
-    gs = gridspec.GridSpec(3, 2, height_ratios=[1.4, 1.0, 1.0], hspace=0.35, wspace=0.25)
+    fig = plt.figure(figsize=(15, 13.2))           # ← un peu plus haut pour 4 lignes
+    gs = gridspec.GridSpec(4, 2, 
+                          height_ratios=[1.05, 0.85, 0.85, 0.95],   # ← la dernière ligne plus petite
+                          hspace=0.32, wspace=0.26)
 
-    sample_name = metadata["Name"][0]
+    sample_name = metadata['Name'][0]
     read_mv = reading_voltage * 1e3
 
     fig.suptitle(
         f"Mem-CVM Dashboard — {sample_name}",
-        fontsize=18,
+        fontsize=19,
         fontweight="semibold",
-        y=0.955,
+        y=0.97,
     )
-    fig.subplots_adjust(top=0.925)
+    fig.subplots_adjust(top=0.93, bottom=0.04)
 
 
     df_temp = Main_CVM_Dataframe
@@ -419,9 +587,10 @@ def Dashboard_memCVM(
     left_font_size = 16
     left_xlabel = "Writting Voltage [V]"
     left_ylabel = f"Capacitance near {reading_voltage} V [F]"
-    color_left_plot = "#D11644"
+    Pulse_plot_poscolor = "#0072B2"
+    Pulse_plot_negcolor = "#D55E00"
 
-    Left_plot = fig.add_subplot(gs[1:, 0])
+    Left_plot = fig.add_subplot(gs[1:3, 0])
   
 
     # --- Récupération des valeurs ---
@@ -439,8 +608,39 @@ def Dashboard_memCVM(
     Caps = np.array(Caps)
 
     mask = np.isfinite(Caps) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
+    Vwrites = Vwrites[mask]
+    Caps = Caps[mask]
+    # 3) Séparer positifs / négatifs pour la couleur
+    pos_mask = Vwrites > 0
+    neg_mask = Vwrites < 0
 
-    Left_plot.plot(Vwrites[mask], Caps[mask], marker='o', markersize=3, linestyle='-',label = "Mem-CVM", linewidth=1.5, color=color_left_plot, alpha=0.95)
+    Left_plot.plot(
+        Vwrites, 
+        Caps, 
+        linestyle='-',
+        linewidth=0.8, 
+        color="#000000", 
+        alpha=0.35
+        )
+    Left_plot.scatter(
+        Vwrites[pos_mask],
+        Caps[pos_mask],
+        marker="o",
+        s = 30,   # ajuste la taille visuelle
+        color=Pulse_plot_poscolor,
+        label="Positive Vwrite",
+        zorder=10
+        )
+    Left_plot.scatter(
+        Vwrites[neg_mask],
+        Caps[neg_mask],
+        marker="o",
+        s = 30,   # ajuste la taille visuelle
+        color=Pulse_plot_negcolor,
+        label="Negative Vwrite",
+        zorder=10
+        )
+    
     Left_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
     Left_plot.tick_params(labelsize=11)
 
@@ -449,21 +649,17 @@ def Dashboard_memCVM(
     Left_plot.tick_params(axis="both", labelsize=left_font_size)
     Left_plot.spines["top"].set_visible(False)
     Left_plot.spines["right"].set_visible(False)
-    Left_plot.legend(frameon=False)
 
 
     # =========================
-    # Row 2 — right
+    # Rows 2–3 — right (merged) --- textbox ---
     # =========================
 
-    Right_01_plot_xlabel = "Pulse number (sequence index)"
-    Right_01_plot_ylabel = f"Capacitance near {reading_voltage} V [F]"
-    Right_01_plot_fontsize = 16
-    Right_01_plot_poscolor = "#0072B2"
-    Right_01_plot_negcolor = "#D55E00"
-    Right_01_plot_Markersize = 3
 
-    Right_01_plot = fig.add_subplot(gs[1, 1])
+    Text_ax = fig.add_subplot(gs[1:3, 1])
+    Text_ax.axis("off")
+
+    metadata = seq_file_parsing(path_metadata)
 
     if len(Read_CVM_Dataframe) == 0:
         raise ValueError("Read_CVM_Dataframe est vide.")
@@ -485,6 +681,97 @@ def Dashboard_memCVM(
         Vwrite_list.append(v)
 
 
+    # --- Raccourcis / formatage sûr ---
+    mode = metadata["Mode"][0]
+    prepol = metadata["Prepol"][0]
+    unipolar = metadata["Unipolar"][0]
+    current_range = metadata["Current_range"][0]
+    integration = metadata["Integration"][0]
+    amp_v = float(metadata["Amplitude_V"][0])
+    ss_f = float(metadata["SS_Frequency_Hz"][0])
+    ss_a = float(metadata["SS_Amplitude_V"][0])
+
+    rise_us = float(metadata["Rise_time_s"][0]) * 1e6
+    vpos_start = metadata["PM_Positive_start_V"][0]
+    vpos_end = metadata["PM_Positive_end_V"][0]
+    vpos_step = metadata["PM_Positive_steps"][0]
+    vneg_start = metadata["PM_Negative_start_V"][0]
+    vneg_end = metadata["PM_Negative_end_V"][0]
+    vneg_step = metadata["PM_Negative_steps"][0]
+    
+    date = metadata["Date"][0]
+    read_mv = reading_voltage * 1e3
+    n_curves = len(Read_CVM_Dataframe)
+
+
+    bias_vec = Read_CVM_Dataframe[0]["Bias [V]"]
+    read_win_min_mv = float(bias_vec.min()) * 1e3
+    read_win_max_mv = float(bias_vec.max()) * 1e3
+    n_read_pts = len(bias_vec)
+
+    mem_window_pf = (max(Cmem_list) - min(Cmem_list)) * 1e12
+    on_off = max(Cmem_list) / min(Cmem_list)
+
+    # --- Texte structuré ---
+    text = (
+        f"Date                  : {date}\n"
+        f"Read voltage          : {read_mv:.1f} mV\n"
+        f"Read curves           : {n_curves:d}\n"
+        f"\n"
+        f"Vwrite range pos      : {vpos_start:.2f} → {vpos_end:.2f} V\n"
+        f"Vwrite pos step       : {vpos_step}\n"
+        f"Vwrite range neg      : {vneg_start:.2f} → {vneg_end:.2f} V\n"
+        f"Vwrite neg step       : {vneg_step}\n"
+        f"Pulse width (rise)    : {rise_us:.1f} µs\n"
+        f"\n"
+        f"Memory window         : {mem_window_pf:.2f} pF\n"
+        f"ON/OFF ratio          : {on_off:.3f}\n"
+        f"Read window           : {read_win_min_mv:.1f} → {read_win_max_mv:.1f} mV\n"
+        f"\n"
+        f"Mode                  : {mode}\n"
+        f"Read points           : {n_read_pts:d}\n"
+        f"Integration           : {integration}\n"
+        f"Amplitude             : {amp_v:.2f} V\n"
+        f"SS freq / amp         : {ss_f:.0f} Hz / {ss_a:.2f} V\n"
+        f"Prepol                : {prepol}\n"
+        f"Unipolar              : {unipolar}\n"
+        f"Current range         : {current_range}"
+    )
+
+    Text_ax.axis("off")
+
+    # 3) Mettre le texte dans cet axe (coordonnées axes: 0→1)
+    tb_text = Text_ax.text(
+        -0.1, 0.98, text,
+        transform=Text_ax.transAxes,
+        va="top",
+        ha="left",
+        family="monospace",
+        fontsize=15,
+        linespacing=1.25,
+        bbox=dict(
+            boxstyle="round,pad=0.5,rounding_size=0.2",
+            facecolor="white",
+            edgecolor="0.75",
+            linewidth=1.0,
+            alpha=0.95
+        )
+    )
+
+
+    # =========================
+    # Row 4 - full width
+    # =========================
+
+    Pulse_plot_xlabel = "Pulse number (sequence index)"
+    Pulse_plot_ylabel = f"Capacitance near {reading_voltage} V [F]"
+    Pulse_plot_fontsize = 16
+    Pulse_plot_poscolor = "#0072B2"
+    Pulse_plot_negcolor = "#D55E00"
+    Pulse_plot_Markersize = 3
+
+    Pulse_plot = fig.add_subplot(gs[3, :])
+
     mask = np.isfinite(Cmem_list) # to avoid plotting NaN values coming through get_capacitance_near_target_bias
 
     pulse_numbers = np.array(pulse_numbers)
@@ -498,127 +785,55 @@ def Dashboard_memCVM(
     pos_mask = Vwrite_list > 0
     neg_mask = Vwrite_list < 0
 
-    # === Positifs ===
+    # Remplace la partie tracé (les deux if np.any(pos/neg)) par ceci :
+
+    # Points positifs
     if np.any(pos_mask):
-        Right_01_plot.plot(
+        Pulse_plot.scatter(
             pulse_numbers[pos_mask],
             Cmem_list[pos_mask],
             marker="o",
-            linestyle="-",
-            linewidth=1.4,
-            markersize=Right_01_plot_Markersize,
-            color=Right_01_plot_poscolor,
+            s=(Pulse_plot_Markersize**2)*3,   # ajuste la taille visuelle
+            color=Pulse_plot_poscolor,
             label="Positive Vwrite",
+            zorder=10
         )
 
-    # === Négatifs ===
+    # Points négatifs
     if np.any(neg_mask):
-        Right_01_plot.plot(
+        Pulse_plot.scatter(
             pulse_numbers[neg_mask],
             Cmem_list[neg_mask],
             marker="o",
-            linestyle="-",
-            linewidth=1.4,
-            markersize=Right_01_plot_Markersize,
-            color= Right_01_plot_negcolor,
+            s=(Pulse_plot_Markersize**2)*3,
+            color=Pulse_plot_negcolor,
             label="Negative Vwrite",
+            zorder=10
         )
+
+    # Option bonus : ligne très légère qui suit TOUTE la séquence (souvent joli)
+    Pulse_plot.plot(
+        pulse_numbers,
+        Cmem_list,
+        color='grey',
+        alpha=0.25,
+        linewidth=0.8,
+        zorder=1
+    )
 
     # 4) Axes, style, titres
-    Right_01_plot.set_xlabel(Right_01_plot_xlabel, fontsize=Right_01_plot_fontsize)
-    Right_01_plot.set_ylabel(Right_01_plot_ylabel, fontsize=Right_01_plot_fontsize)
-    Right_01_plot.spines["top"].set_visible(False)
-    Right_01_plot.spines["right"].set_visible(False)
-    Right_01_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
-    Right_01_plot.tick_params(axis="both", labelsize=Right_01_plot_fontsize)
-
-    Right_01_plot.legend(
-        loc="best",
-        frameon=False,
-        fontsize=10,
-    )
+    Pulse_plot.set_xlabel(Pulse_plot_xlabel, fontsize=Pulse_plot_fontsize)
+    Pulse_plot.set_ylabel(Pulse_plot_ylabel, fontsize=Pulse_plot_fontsize)
+    Pulse_plot.spines["top"].set_visible(False)
+    Pulse_plot.spines["right"].set_visible(False)
+    Pulse_plot.grid(True, linestyle=":", linewidth=0.5, alpha=0.35)
+    Pulse_plot.tick_params(axis="both", labelsize=Pulse_plot_fontsize)
+    Pulse_plot.legend(frameon = False, fontsize = 11.5)
 
 
-    # =========================
-    # Row 3 — textbox
-    # =========================
-    Right_02_text = fig.add_subplot(gs[2, 1])
-    Right_02_text.axis("off")
-
-    metadata = seq_file_parsing(path_metadata)
-
-    # --- Raccourcis / formatage sûr ---
-    mode = metadata["Mode"][0]
-    rise_us = float(metadata["Rise_time_s"][0]) * 1e6
-    integration = metadata["Integration"][0]
-    amp_v = float(metadata["Amplitude_V"][0])
-    ss_f = float(metadata["SS_Frequency_Hz"][0])
-    ss_a = float(metadata["SS_Amplitude_V"][0])
-
-    read_mv = reading_voltage * 1e3
-    n_curves = len(Read_CVM_Dataframe)
-
-    vmin = min(Vwrite_list)
-    vmax = max(Vwrite_list)
-
-    bias_vec = Read_CVM_Dataframe[0]["Bias [V]"]
-    read_win_min_mv = float(bias_vec.min()) * 1e3
-    read_win_max_mv = float(bias_vec.max()) * 1e3
-    n_read_pts = len(bias_vec)
-
-    mem_window_pf = (max(Cmem_list) - min(Cmem_list)) * 1e12
-    on_off = max(Cmem_list) / min(Cmem_list)
-
-    # --- Texte structuré ---
-    text = (
-        f"Read voltage          : {read_mv:.1f} mV\n"
-        f"Read curves           : {n_curves:d}\n"
-        f"Vwrite range          : {vmin:.2f} → {vmax:.2f} V\n"
-        f"Pulse width (rise)    : {rise_us:.1f} µs\n"
-        f"\n"
-        f"Memory window         : {mem_window_pf:.2f} pF\n"
-        f"ON/OFF ratio          : {on_off:.3f}\n"
-        f"Read window           : {read_win_min_mv:.1f} → {read_win_max_mv:.1f} mV\n"
-        f"\n"
-        f"Mode                  : {mode}\n"
-        f"Read points           : {n_read_pts:d}\n"
-        f"Integration           : {integration}\n"
-        f"Amplitude             : {amp_v:.2f} V\n"
-        f"SS freq / amp         : {ss_f:.0f} Hz / {ss_a:.2f} V"
-    )
-
-    # 1) Récupérer la position exacte du plot au-dessus (en coordonnées figure)
-    bbox = Right_01_plot.get_position()  # Bbox(x0, y0, x1, y1)
-
-    # 2) Créer un axe texte avec la même largeur (même x0 et même width)
-    text_height = 0.24   # ajuste si besoin (0.20–0.28 typiquement)
-    gap = 0.055           # petit espace entre plot et box
-
-    text_bottom = bbox.y0 - text_height - gap
-
-    Right_02_text = fig.add_axes([bbox.x0, text_bottom, bbox.width, text_height])
-    Right_02_text.axis("off")
-
-    # 3) Mettre le texte dans cet axe (coordonnées axes: 0→1)
-    tb_text = Right_02_text.text(
-        0.02, 0.98, text,
-        transform=Right_02_text.transAxes,
-        va="top",
-        ha="left",
-        family="monospace",
-        fontsize=12.5,
-        linespacing=1.25,
-        bbox=dict(
-            boxstyle="round,pad=0.5,rounding_size=0.2",
-            facecolor="white",
-            edgecolor="0.75",
-            linewidth=1.0,
-            alpha=0.95
-        )
-    )
 
     os.makedirs(Output_path, exist_ok=True)
-    plot_name = f"{metadata["Date"][0]}_{metadata["Name"][0]}_Dashboard.png"
+    plot_name = f"{metadata['Date'][0]}_{metadata['Name'][0]}_{metadata['Device_ID'][0]}_Dashboard.png"
     Output_path = os.path.join(Output_path, plot_name)
     plt.savefig(Output_path, dpi=300)
     print(f"Dashboard saved to: {Output_path}")

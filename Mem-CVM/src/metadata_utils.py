@@ -21,7 +21,37 @@ def seq_file_parsing(path):
         lines = f.read().splitlines()
 
     # Dictionnaire pour stocker les valeurs propres
-    data = {}
+    data = {
+        # Dates & identification
+        'Date': np.nan,
+        'Name': np.nan,
+        'Device_ID': np.nan,
+        
+        # Sample parameters
+        'Area_um2': np.nan,
+        'Thickness_nm': np.nan,
+        
+        # Writing pulses
+        'Rise_time_s': np.nan,
+        'PM_Positive_start_V': np.nan,
+        'PM_Positive_end_V': np.nan,
+        'PM_Positive_steps': np.nan,
+        'PM_Negative_start_V': np.nan,
+        'PM_Negative_end_V': np.nan,
+        'PM_Negative_steps': np.nan,
+        
+        # CVM Reading parameters
+        'Amplitude_V': np.nan,
+        'Points': np.nan,
+        'Mode': np.nan,
+        'Integration': np.nan,
+        'Unipolar': np.nan,
+        'Prepol': np.nan,
+        'Current_range': np.nan,
+        'Frequency_Hz': np.nan,
+        'SS_Amplitude_V': np.nan,
+        'SS_Frequency_Hz': np.nan,
+    }
 
     # Fonction interne pour extraire proprement le nombre ou le texte entre les ":"
     def clean_val(raw_line):
@@ -37,15 +67,16 @@ def seq_file_parsing(path):
     # On parcourt les lignes
     for line in lines:
         if "Date:" in line:
-            data["Date"] = clean_val(line)
+            data['Date'] = clean_val(line)
         elif "Name:" in line:
-            data["Name"] = clean_val(line)
-        elif "Rise time:" in line: 
-            data["Rise_time_s"] = clean_val(line)
+            data['Name'] = clean_val(line)
+        elif "Device ID:" in line:
+            data['Device_ID'] = clean_val(line)
         elif "Area:" in line: 
             data["Area_um2"] = clean_val(line)
         elif "Thickness:" in line: 
             data["Thickness_nm"] = clean_val(line)
+        # Read CVM metadata
         elif "Small-signal amplitude:" in line: 
             data["SS_Amplitude_V"] = clean_val(line)
         elif "Small-signal frequency:" in line: 
@@ -64,11 +95,32 @@ def seq_file_parsing(path):
             data["Prepol"] = clean_val(line)
         elif "Frequency:" in line: 
             data["Frequency_Hz"] = clean_val(line)
+        elif "Current range:" in line:
+            data["Current_range"] = clean_val(line)
+        # PM Writing pulses 
+        elif "Positive start:" in line:
+            data["PM_Positive_start_V"] = clean_val(line)
+        elif "Positive end:" in line:
+            data["PM_Positive_end_V"] = clean_val(line)
+        elif "Positive steps:" in line:
+            data["PM_Positive_steps"] = clean_val(line)
+        elif "Negative start:" in line:
+            data["PM_Negative_start_V"] = clean_val(line)
+        elif "Negative end:" in line:
+            data["PM_Negative_end_V"] = clean_val(line)
+        elif "Negative steps:" in line:
+            data["PM_Negative_steps"] = clean_val(line)
+        elif "Rise time:" in line: 
+            data["Rise_time_s"] = clean_val(line)
 
     # Création du DataFrame (index [0] car c'est une seule ligne de données)
     df = pd.DataFrame([data])
     
     return df
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def extract_CVM_dataframe(CVM_file: str) -> pd.DataFrame:
@@ -116,7 +168,9 @@ def extract_CVM_dataframe(CVM_file: str) -> pd.DataFrame:
 
     return df
 
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 def extract_read_CVM_dataframes(memCVM_files: list) -> list:
     """
@@ -125,6 +179,38 @@ def extract_read_CVM_dataframes(memCVM_files: list) -> list:
     """
 
     dataframes = []
+
+    def extract_loop_number(filepath: str) -> int | None:
+        """
+        Extrait le numéro de loop à partir d'un nom de fichier de type :
+        ..._loop-1.dat
+
+        Retourne un int (ex: 1) ou None si non trouvé.
+        """
+        filename = os.path.basename(filepath)
+
+        match = re.search(r'loop-(\d+)\.dat$', filename)
+        if match:
+            return int(match.group(1))
+        else:
+            return None
+        
+
+    def extract_writing_voltage(filepath: str) -> float | None:
+        """
+        Extrait le writing voltage à partir d'un nom de fichier de type :
+        memCVM_-1.5Vwr_2025-12-02_...
+
+        Retourne un float (ex: -1.5) ou None si non trouvé.
+        """
+        filename = os.path.basename(filepath)
+
+        match = re.search(r'memCVM_([+-]?\d+(?:\.\d+)?)Vwr', filename)
+        if match:
+            return float(match.group(1))
+        else:
+            return None
+        
 
     for file in memCVM_files:
         df = extract_CVM_dataframe(file)
@@ -148,39 +234,9 @@ def extract_read_CVM_dataframes(memCVM_files: list) -> list:
     return dataframes
 
 
-
-def extract_writing_voltage(filepath: str) -> float | None:
-    """
-    Extrait le writing voltage à partir d'un nom de fichier de type :
-    memCVM_-1.5Vwr_2025-12-02_...
-
-    Retourne un float (ex: -1.5) ou None si non trouvé.
-    """
-    filename = os.path.basename(filepath)
-
-    match = re.search(r'memCVM_([+-]?\d+(?:\.\d+)?)Vwr', filename)
-    if match:
-        return float(match.group(1))
-    else:
-        return None
-    
-
-
-def extract_loop_number(filepath: str) -> int | None:
-    """
-    Extrait le numéro de loop à partir d'un nom de fichier de type :
-    ..._loop-1.dat
-
-    Retourne un int (ex: 1) ou None si non trouvé.
-    """
-    filename = os.path.basename(filepath)
-
-    match = re.search(r'loop-(\d+)\.dat$', filename)
-    if match:
-        return int(match.group(1))
-    else:
-        return None
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def get_vwrite_from_df(df: pd.DataFrame) -> float:
@@ -196,6 +252,9 @@ def get_vwrite_from_df(df: pd.DataFrame) -> float:
     return float(v)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def sort_memcvm_dfs(
@@ -256,10 +315,9 @@ def sort_memcvm_dfs(
 
 
 
-
-
-
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 
@@ -298,7 +356,9 @@ def get_capacitance_near_target_bias(
     return float(value) if np.isfinite(value) else np.nan
 
 
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def mobile_average(window: int, Dataframe: pd.DataFrame) -> pd.DataFrame:
@@ -312,8 +372,9 @@ def mobile_average(window: int, Dataframe: pd.DataFrame) -> pd.DataFrame:
     
     return df_result
 
-
-
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 def build_wide_dataframe_from_list(
     Read_CVM_Dataframe: List[pd.DataFrame],
@@ -368,8 +429,77 @@ def build_wide_dataframe_from_list(
     return pd.concat(blocks, axis=1)
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
+
+def get_min_max_Voltage(Read_CVM_Dataframe: List[pd.DataFrame]):
+
+    #Suppose to give the min an the max of the Bias V for the reading pulse.
+
+    Vlistmin = []
+    Vlistmax = []
+
+    if not Read_CVM_Dataframe:
+            raise ValueError("Empty dataframe for the reading CVM measurement.")
+
+    for df in Read_CVM_Dataframe:
+        vmin = df["Bias [V]"].min()
+        vmax = df["Bias [V]"].max()
+        Vlistmin.append(vmin)
+        Vlistmax.append(vmax)
+    
+    V_min = min(Vlistmin)
+    V_max = max(Vlistmax)
+
+    return (V_min, V_max)
+    
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
+
+def get_min_max_Capacitance(Main_CVM_Dataframe: pd.DataFrame, Read_CVM_Dataframe: List[pd.DataFrame]):
+
+    
+    V_range = get_min_max_Voltage(Read_CVM_Dataframe=Read_CVM_Dataframe)
+
+    mask = (Main_CVM_Dataframe["Bias [V]"] >= V_range[0]) & (Main_CVM_Dataframe["Bias [V]"] <= V_range[1])
+    df_main_filtered = Main_CVM_Dataframe["C [F]"][mask]
+
+    #Sanity check
+    if df_main_filtered.empty:
+        raise ValueError("No data in Main_CVM_Dataframe within voltage range.")
+
+    C_min_main = min(df_main_filtered)
+    C_max_main = max(df_main_filtered)
+
+    Clistmin = []
+    Clistmax = []
+
+    if not Read_CVM_Dataframe:
+            raise ValueError("Empty dataframe for the reading CVM measurement.")
+
+    for df in Read_CVM_Dataframe:
+        vmin = df["C [F]"].min()
+        vmax = df["C [F]"].max()
+        Clistmin.append(vmin)
+        Clistmax.append(vmax)
+    
+    C_min_read = min(Clistmin)
+    C_max_read = max(Clistmax)
+
+    C_min = min(C_min_main, C_min_read)
+    C_max = max(C_max_main, C_max_read)
+
+    return (float(C_min), float(C_max))
 
 
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 def write_csv_with_metadata(
     Output_path: str,
     df_metadata: pd.DataFrame,
@@ -384,7 +514,7 @@ def write_csv_with_metadata(
     """
 
     os.makedirs(Output_path, exist_ok=True)
-    csv_name = f"{df_metadata["Date"][0]}_{df_metadata["Name"][0]}_memCVM_READ.csv"
+    csv_name = f"{df_metadata['Date'][0]}_{df_metadata['Name'][0]}_{df_metadata['Device_ID'][0]}_memCVM_READ.csv"
     Output_path = os.path.join(Output_path, csv_name)
     
 
