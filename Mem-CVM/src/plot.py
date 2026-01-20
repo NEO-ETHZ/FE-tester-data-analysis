@@ -531,12 +531,12 @@ def Dashboard_memCVM(
     top_font_size = 16
     color_main_plot = "#D11644"
     top_xlabel = "Bias [V]"
-    top_ylabel = "Capacitance [F]"
+    top_ylabel = "Capacitance [pF]"
 
     df_mobile_average = mobile_average(3, df_temp["C [F]"])
 
     Top_plot = fig.add_subplot(gs[0, :])
-    Top_plot.plot(df_temp["Bias [V]"], df_mobile_average, label="Main CVM", linewidth=1.5, color=color_main_plot)
+    Top_plot.plot(df_temp["Bias [V]"], df_mobile_average*1e+12, label="Main CVM", linewidth=1.5, color=color_main_plot)
 
     # === Plotting and colorbar legend ===
     vmin = min(Vwrite_list)
@@ -550,7 +550,7 @@ def Dashboard_memCVM(
 
         Top_plot.plot(
             df["Bias [V]"],
-            df["C [F]"],
+            df["C [F]"]*1e+12,
             color=color,
             linewidth=1,
             linestyle="--"
@@ -586,7 +586,7 @@ def Dashboard_memCVM(
 
     left_font_size = 16
     left_xlabel = "Writting Voltage [V]"
-    left_ylabel = f"Capacitance near {reading_voltage} V [F]"
+    left_ylabel = f"Capacitance near {reading_voltage} V [pF]"
     Pulse_plot_poscolor = "#0072B2"
     Pulse_plot_negcolor = "#D55E00"
 
@@ -616,7 +616,7 @@ def Dashboard_memCVM(
 
     Left_plot.plot(
         Vwrites, 
-        Caps, 
+        Caps*1e+12, 
         linestyle='-',
         linewidth=0.8, 
         color="#000000", 
@@ -624,7 +624,7 @@ def Dashboard_memCVM(
         )
     Left_plot.scatter(
         Vwrites[pos_mask],
-        Caps[pos_mask],
+        Caps[pos_mask]*1e+12,
         marker="o",
         s = 30,   # ajuste la taille visuelle
         color=Pulse_plot_poscolor,
@@ -633,7 +633,7 @@ def Dashboard_memCVM(
         )
     Left_plot.scatter(
         Vwrites[neg_mask],
-        Caps[neg_mask],
+        Caps[neg_mask]*1e+12,
         marker="o",
         s = 30,   # ajuste la taille visuelle
         color=Pulse_plot_negcolor,
@@ -764,7 +764,7 @@ def Dashboard_memCVM(
     # =========================
 
     Pulse_plot_xlabel = "Pulse number (sequence index)"
-    Pulse_plot_ylabel = f"Capacitance near {reading_voltage} V [F]"
+    Pulse_plot_ylabel = f"Capacitance near {reading_voltage} V [pF]"
     Pulse_plot_fontsize = 16
     Pulse_plot_poscolor = "#0072B2"
     Pulse_plot_negcolor = "#D55E00"
@@ -791,7 +791,7 @@ def Dashboard_memCVM(
     if np.any(pos_mask):
         Pulse_plot.scatter(
             pulse_numbers[pos_mask],
-            Cmem_list[pos_mask],
+            Cmem_list[pos_mask]*1e+12,
             marker="o",
             s=(Pulse_plot_Markersize**2)*3,   # ajuste la taille visuelle
             color=Pulse_plot_poscolor,
@@ -803,7 +803,7 @@ def Dashboard_memCVM(
     if np.any(neg_mask):
         Pulse_plot.scatter(
             pulse_numbers[neg_mask],
-            Cmem_list[neg_mask],
+            Cmem_list[neg_mask]*1e+12,
             marker="o",
             s=(Pulse_plot_Markersize**2)*3,
             color=Pulse_plot_negcolor,
@@ -814,7 +814,7 @@ def Dashboard_memCVM(
     # Option bonus : ligne très légère qui suit TOUTE la séquence (souvent joli)
     Pulse_plot.plot(
         pulse_numbers,
-        Cmem_list,
+        Cmem_list*1e+12,
         color='grey',
         alpha=0.25,
         linewidth=0.8,
