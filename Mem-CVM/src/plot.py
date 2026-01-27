@@ -9,7 +9,7 @@ import matplotlib.cm as cm
 import os
 from src.metadata_utils import get_min_max_Voltage, get_min_max_Capacitance
 from src.metadata_utils import get_capacitance_near_target_bias, mobile_average, seq_file_parsing
-
+from src.metadata_utils import get_ON_OFF
 
 def plot_memCVM_overview(
     Main_CVM_Dataframe: pd.DataFrame,
@@ -710,8 +710,15 @@ def Dashboard_memCVM(
     n_read_pts = len(bias_vec)
 
     mem_window_pf = (max(Cmem_list) - min(Cmem_list)) * 1e12
-    on_off = max(Cmem_list) / min(Cmem_list)
 
+    try:
+        on_off = get_ON_OFF(Read_CVM_Dataframes=Read_CVM_Dataframe, Target_voltage=reading_voltage)
+        print("ON/OFF ratio computed for the last cycle")
+    except:
+        on_off = max(Cmem_list) / min(Cmem_list)
+        print("ON/OFF ratio compute for the min and max of the whole series")
+        print("It could be due to a bug in the computation of the ON/OFF")
+        print("or simply you are using an old version of the measurement script")
     # --- Texte structuré ---
     text = (
         f"Date                  : {date}\n"
@@ -770,6 +777,8 @@ def Dashboard_memCVM(
     Pulse_plot_negcolor = "#D55E00"
     Pulse_plot_Markersize = 3
 
+
+    
     Pulse_plot = fig.add_subplot(gs[3, :])
 
     mask = np.isfinite(Cmem_list) # to avoid plotting NaN values coming through get_capacitance_near_target_bias

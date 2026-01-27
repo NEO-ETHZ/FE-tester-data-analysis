@@ -540,3 +540,57 @@ def write_csv_with_metadata(
             sep=sep,
             index=False
         )
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def get_ON_OFF(Read_CVM_Dataframes: list[pd.DataFrame], Target_voltage: float):
+
+
+    def get_dfs_with_max_loop(df_list):
+
+        loop_values = []
+
+        for df in df_list:
+            loop_values.append(df["Loop"].iloc[0])
+
+        max_loop = max(loop_values)
+
+        dfs_max = []
+        for df in df_list:
+            if df["Loop"].iloc[0] == max_loop:
+                dfs_max.append(df)
+
+        return dfs_max
+
+    
+    DF_MAX_LOOP = get_dfs_with_max_loop(Read_CVM_Dataframes)
+    DF_END = []
+
+    for pepelo in DF_MAX_LOOP:
+        C_mem = get_capacitance_near_target_bias(pepelo, target=Target_voltage)
+        DF_END.append(C_mem)
+
+    C_max = max(DF_END)
+    C_min = min(DF_END)
+
+    ON_OFF = C_max/C_min
+
+    return ON_OFF
+
+
+
+
+
+
+
+
+
+
+
+
+

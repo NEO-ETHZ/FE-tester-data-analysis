@@ -101,12 +101,14 @@ def get_capacitance_near_target_bias(
     if bias_col not in df.columns or cap_col not in df.columns:
         raise KeyError(f"Colonnes '{bias_col}' ou '{cap_col}' absentes du DataFrame.")
 
-    bias = df[bias_col].values
-    cap = df[cap_col].values
+    bias = df[bias_col]
+    cap = df[cap_col]
 
     # DataFrame vide ou trop court
     if len(bias) == 0:
         return np.nan
+
+
 
     # Target hors plage → mesure incomplète → NaN
     if target > np.nanmax(bias) or target < np.nanmin(bias):
@@ -230,6 +232,69 @@ def extract_index(path: str) -> int:
     if m is None:
         raise ValueError(f"Index introuvable dans: {path}")
     return int(m.group(1))
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def extract_CVM_Average(memCVM_files: list) -> pd.DataFrame:
+    """
+    Extrait le tableau Bias-C-tan(delta) du fichier CVM .dat.
+    Ignore :
+      - le bloc CVResult
+      - les métadonnées
+    Ne garde que le tableau qui suit le bloc 'CV'.
+    """
+
+    MEAN_DATAFRAME = []
+
+    for file in memCVM_files:
+    
+        with open(file, 'r', encoding='utf-8', errors='ignore') as f:
+            lines = f.readlines()
+
+        # 1) Trouver le début du bloc 'CV'
+        cv_block_start = None
+        for i, line in enumerate(lines):
+            if line.strip() == "CV":
+                cv_block_start = i
+                break
+
+        if cv_block_start is None:
+            raise ValueError("Bloc 'CV' introuvable dans le fichier (pas de ligne 'CV').")
+
+        # 2) À partir du bloc 'CV', trouver la première ligne tabulée = header du 2e tableau
+        table_header_idx = None
+        for i, line in enumerate(lines):
+        
+            if line.count('\t') >= 2 and line.strip() != "":
+                table_header_idx = i
+                break
+
+        if table_header_idx is None:
+            raise ValueError("Impossible de trouver le header du tableau Bias–C après le bloc 'CV'.")
+
+        # 3) Garder uniquement le 2e tableau (header + data)
+        table_text = "".join(lines[table_header_idx:(cv_block_start-1)])
+
+        # 4) Lecture avec pandas
+        df = pd.read_csv(
+            io.StringIO(table_text),
+            sep="\t",
+            engine="python"
+        )
+
+        C_av = df["Cav [F]"][0]
+
+        MEAN_DATAFRAME.append(C_av)
+    
+
+    return MEAN_DATAFRAME
+
+
+
 
 
 

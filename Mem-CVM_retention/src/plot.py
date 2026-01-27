@@ -10,12 +10,7 @@ import os
 
 from src.metadata_utils import get_capacitance_near_target_bias, compute_elapsed_time_seconds
 
-
-
-
-
-
-
+# ──────────────────────────────────────────────────────────────────────────────
 
 def plot_memCVM_retention_vs_time(
     DF_CVM: list,                  # list[pd.DataFrame]
@@ -121,6 +116,167 @@ def plot_memCVM_retention_vs_time(
     # =========================
     ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
     ax.set_ylabel(f"Capacitance near {reading_voltage} V (pF)", fontsize=LABEL_FONTSIZE)
+
+    if title is not None:
+        ax.set_title(title, fontsize=TITLE_FONTSIZE)
+
+    # =========================
+    # Paper ticks + grid
+    # =========================
+    ax.tick_params(
+        axis="both",
+        which="both",
+        direction="in",
+        top=True,
+        right=True,
+        labelsize=TICK_FONTSIZE,
+        length=6,
+        width=1.2
+    )
+    ax.tick_params(axis="both", which="minor", length=3, width=1.0)
+
+    ax.xaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_locator(AutoMinorLocator(5))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+    ax.grid(True, which="major", linestyle="-", linewidth=0.8, alpha=0.30)
+    ax.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.22)
+
+    for spine in ax.spines.values():
+        spine.set_visible(True)
+        spine.set_linewidth(1.2)
+
+    # =========================
+    # Export (optional)
+    # =========================
+    out_path = None
+    if Output_dir is not None:
+        os.makedirs(Output_dir, exist_ok=True)
+
+        if filename is None:
+            filename = f"Cmem_retention_vs_time_{time_unit}.png"
+
+        out_path = os.path.join(Output_dir, filename)
+
+        plt.tight_layout()
+        fig.savefig(out_path, dpi=600, bbox_inches="tight")
+
+    plt.show()
+
+    df = pd.DataFrame({
+    "time_s": time_s,
+    "time_h": time_h,
+    "time_d": time_d,
+    "C_pF": Caps
+    })
+
+    return df
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                         
+# ──────────────────────────────────────────────────────────────────────────────
+
+
+def plot_memCVM_average_vs_time(
+    DF_Cav: list[float],                  # list[pd.DataFrame]
+    Timestamps: list[str],          # list of strings like "01/19/2026 17:41:53"
+    Output_dir: str | None = None,
+    time_unit: str = "s",           # "s", "h", "days"
+    marker_size: int = 40,
+    title: str | None = None,
+    filename: str | None = None,
+):
+    """
+    Paper-friendly plot:
+    Average memory capacitance vs time.
+
+    - DF_CVM: list of CVM DataFrames (one per read)
+    - Timestamps: same length as DF_CVM
+    - time_unit: "s", "h", or "days"
+    """
+
+    if len(DF_Cav) == 0:
+        raise ValueError("DF_CVM is empty.")
+    if len(DF_Cav) != len(Timestamps):
+        raise ValueError("DF_CVM and Timestamps must have the same length.")
+
+    # =========================
+    # Build arrays
+    # =========================
+
+    time_s = compute_elapsed_time_seconds(Timestamps)
+
+    Caps = np.asarray(DF_Cav)
+    time_s = np.asarray(time_s, dtype=float)
+
+    mask = np.isfinite(Caps) & np.isfinite(time_s)
+    Caps = Caps[mask]
+    time_s = time_s[mask]
+
+    # Conversion in pF
+    Caps_pF = Caps * 1e12
+
+    # Time unit conversion
+    if time_unit == "s":
+        time_x = time_s
+        xlabel = "Time (s)"
+    elif time_unit == "h":
+        time_x = time_s / 3600.0
+        xlabel = "Time (h)"
+    elif time_unit == "days":
+        time_x = time_s / (3600.0 * 24.0)
+        xlabel = "Time (days)"
+    else:
+        raise ValueError("time_unit must be 's', 'h', or 'days'.")
+    
+    # For dataframe extraction
+    time_h = time_s/3600.0
+    time_d = time_s/(3600.0 * 24.0)
+
+    # =========================
+    # Paper style (same as your other function)
+    # =========================
+    FIGSIZE = (9.0, 6.0)
+    LABEL_FONTSIZE = 18
+    TICK_FONTSIZE = 16
+    LEGEND_FONTSIZE = 14
+    TITLE_FONTSIZE = 18
+
+    LINE_COLOR = "#000000"
+    POINT_COLOR = "#285b96"   # same blue vibe as POS_COLOR
+    LINEWIDTH = 0.8
+    ms = float(marker_size) ** 0.5
+
+    fig, ax = plt.subplots(figsize=FIGSIZE)
+
+    # =========================
+    # Plot
+    # =========================
+    ax.plot(
+        time_x,
+        Caps_pF,
+        color=LINE_COLOR,
+        alpha=0.65,
+        linewidth=LINEWIDTH,
+        zorder=1
+    )
+
+    ax.scatter(
+        time_x,
+        Caps_pF,
+        marker="o",
+        s=marker_size,
+        color=POINT_COLOR,
+        label="Retention read",
+        zorder=10
+    )
+
+    # =========================
+    # Labels / title
+    # =========================
+    ax.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
+    ax.set_ylabel(f"Average Capacitance (pF)", fontsize=LABEL_FONTSIZE)
 
     if title is not None:
         ax.set_title(title, fontsize=TITLE_FONTSIZE)
