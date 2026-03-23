@@ -27,10 +27,8 @@ def filter_cvm_files(files: list) -> dict:
 
     for f in files:
         name = os.path.basename(f)
-
         if name.startswith("memCVM") and name.endswith(".dat"):
             mem_files.append(f)
-
         if name.startswith("mainCVM") and name.endswith(".dat"):
             main_files = f
 

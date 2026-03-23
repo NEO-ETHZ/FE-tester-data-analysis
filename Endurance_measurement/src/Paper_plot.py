@@ -194,6 +194,9 @@ def PUND_collumn_splitter(df):
 
 
 
+import matplotlib.pyplot as plt
+from matplotlib.ticker import AutoMinorLocator, NullFormatter
+
 
 def plot_PVIV_PUND(
     df,
@@ -202,107 +205,101 @@ def plot_PVIV_PUND(
     y2_col="I1 [A]",
     color_y1="#289E46",
     color_y2="#461172",
-    xlabel="Voltage (V)",
-    ylabel_y1="Polarization (uC/cm²)",
-    ylabel_y2="Current (µA)",
+    xlabel="Voltage [V]",
+    ylabel_y1="Polarization [µC/cm²]",
+    ylabel_y2="Current [µA]",
 ):
     # =========================
     # Style paper / doctoral plan
     # =========================
-    FIGSIZE = (9, 6)
+    FIGSIZE = (8, 6)
     LINEWIDTH = 3
     LABEL_FONTSIZE = 20
     TICK_FONTSIZE = 20
-    LEGEND_FONTSIZE = 15
-    MARKER_SIZE = 4
 
     fig, ax1 = plt.subplots(figsize=FIGSIZE)
 
-    
     df0 = df
     df_work = df0 if (df0.shape[1] % 4 == 0) else df0.iloc[:, 1:]
     df_list = PUND_collumn_splitter(df_work)
 
-
-    # =========================
-    # Courbe axe Y1 (gauche)
-    # =========================
+    # ==========================================================
+    # AXIS 1 — Polarization
+    # ==========================================================
     for w in df_list:
-        ax1.plot(w['V'], w['P'], color=color_y1, linewidth = LINEWIDTH)
+        ax1.plot(w['V'], w['P'], color=color_y1, linewidth=LINEWIDTH)
 
     ax1.set_xlabel(xlabel, fontsize=LABEL_FONTSIZE)
-    #ax1.set_ylabel(ylabel_y1, fontsize=LABEL_FONTSIZE)
+    ax1.set_ylabel(ylabel_y1, fontsize=LABEL_FONTSIZE, color=color_y1)
     ax1.set_ylim(-35, 35)
 
-
-    # =========================
-    # Courbe axe Y2 (droite)
-    # =========================
+    # ==========================================================
+    # AXIS 2 — Current
+    # ==========================================================
     ax2 = ax1.twinx()
-    for w in df_list:
-        ax2.plot(w['V'], w['I']*1E+6, color=color_y2, linewidth = LINEWIDTH)
-    #ax2.set_ylabel(ylabel_y2, fontsize=LABEL_FONTSIZE)
-    ax2.set_ylim(-16, 12.5)
 
-    # =========================
-    # Ticks inward + minor + top/right
-    # =========================
-    # ax1 : gauche + haut (PAS droite)
+    for w in df_list:
+        ax2.plot(w['V'], w['I'] * 1e6, color=color_y2, linewidth=LINEWIDTH)
+
+    ax2.set_ylabel(ylabel_y2, fontsize=LABEL_FONTSIZE, color=color_y2)
+
+    # ==========================================================
+    # Make left axis visually on top (important for twin axis)
+    # ==========================================================
+    ax1.set_zorder(2)
+    ax2.set_zorder(1)
+    ax1.patch.set_visible(False)
+
+    # ==========================================================
+    # Ticks inward + minor
+    # ==========================================================
     ax1.tick_params(
         axis="both", which="both",
         direction="in", top=True, right=False,
-        labelsize=TICK_FONTSIZE, length=6, width=1.2
+        labelsize=TICK_FONTSIZE, length=6, width=1.2,
+        colors=color_y1
     )
-    ax1.tick_params(axis="both", which="minor", length=3, width=1.0)
 
-    # ax2 : droite + haut (PAS gauche)
     ax2.tick_params(
         axis="both", which="both",
         direction="in", top=True, right=True, left=False,
-        labelsize=TICK_FONTSIZE, length=6, width=1.2
+        labelsize=TICK_FONTSIZE, length=6, width=1.2,
+        colors=color_y2
     )
+
+    ax1.tick_params(axis="both", which="minor", length=3, width=1.0)
     ax2.tick_params(axis="both", which="minor", length=3, width=1.0)
 
-
-    # Minor ticks (X + Y)
     ax1.xaxis.set_minor_locator(AutoMinorLocator(5))
     ax1.yaxis.set_minor_locator(AutoMinorLocator(5))
     ax2.yaxis.set_minor_locator(AutoMinorLocator(5))
 
-    ax1.tick_params(axis="y", colors=color_y1)
-    ax1.yaxis.label.set_color(color_y1)
-
-    ax2.tick_params(axis="y", colors=color_y2)
-    ax2.yaxis.label.set_color(color_y2)
-
-    # (Optionnel) si tu veux pas voir les labels des minor ticks sur Y
     ax1.yaxis.set_minor_formatter(NullFormatter())
     ax2.yaxis.set_minor_formatter(NullFormatter())
-    
 
-    # =========================
-    # Grid (major + minor) -> seulement sur ax1 pour éviter le bazar
-    # =========================
+    # ==========================================================
+    # Grid (only ax1 to avoid chaos)
+    # ==========================================================
     ax1.grid(True, which="major", linestyle="-", linewidth=0.8, alpha=0.35)
     ax1.grid(True, which="minor", linestyle=":", linewidth=0.6, alpha=0.25)
 
-
-    # =========================
-    # Spines (cadre complet)
-    # =========================
+    # ==========================================================
+    # Spines (full frame Laura style)
+    # ==========================================================
     for spine in ax1.spines.values():
-        spine.set_visible(True)
         spine.set_linewidth(1.2)
-    # Sur ax2, on touche surtout la spine droite
+
     ax2.spines["right"].set_linewidth(1.2)
     ax2.spines["top"].set_linewidth(1.2)
 
-    # =========================
-    # Légende commune (ax1 + ax2)
-    # =========================
-
     plt.tight_layout()
     plt.show()
+
+    return fig, ax1, ax2
+
+
+
+
 
 
 
@@ -315,12 +312,14 @@ def plot_PVIV_PUND_triptych(
     xlabel="Voltage (V)",
     ylabel_y1="Polarization (µC/cm²)",
     ylabel_y2="Current (µA)",
+    Label_size : int = 20,
+    Tick_size: int = 18,
     y1_lim=(-35, 35),
     y2_lim=(-16, 12.5),
 ):
     LINEWIDTH = 3
-    LABEL_FONTSIZE = 20
-    TICK_FONTSIZE = 20
+    LABEL_FONTSIZE = Label_size
+    TICK_FONTSIZE = Tick_size
     TITLE_FONTSIZE = 18
 
     if not isinstance(dfs, (list, tuple)) or len(dfs) < 1:

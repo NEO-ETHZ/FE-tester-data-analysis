@@ -12,4 +12,6 @@ dependencies = [
     "moviepy",
     "natsort",
     "jupyter>=1.1.1",
+    "scipy",
+    "ipympl"
 ]

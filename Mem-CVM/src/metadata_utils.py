@@ -290,6 +290,8 @@ def sort_memcvm_dfs(
     # Construire paires (df, loop, vwrite)
     pairs = []
     for df in dfs:
+        if df.empty:
+            continue
         v = float(get_vwrite_from_df(df))
         loop = safe_get_loop(df)
         pairs.append((df, loop, v))
@@ -546,6 +548,55 @@ def write_csv_with_metadata(
 # ──────────────────────────────────────────────────────────────────────────────
 #                          
 # ──────────────────────────────────────────────────────────────────────────────
+def write_csv_with_metadata_with_Vr(
+    Output_path: str,
+    df_metadata: pd.DataFrame,
+    df_data: pd.DataFrame,
+    READING_VOLTAGE: float,
+    sep: str = "\t"
+):
+    """
+    Écrit un CSV avec :
+    - metadata (clé \t valeur)
+    - ligne vide
+    - dataframe principal
+
+    but this one is for the dataframe from the memc at a specific voltage.
+    """
+
+    os.makedirs(Output_path, exist_ok=True)
+    csv_name = f"{df_metadata['Date'][0]}_{df_metadata['Name'][0]}_{df_metadata['Device_ID'][0]}_memCVM_READ_{READING_VOLTAGE}Vr.csv"
+    Output_path = os.path.join(Output_path, csv_name)
+    
+
+    if df_metadata.shape[0] != 1:
+        raise ValueError("df_metadata doit contenir exactement une ligne")
+
+    with open(Output_path, "w", encoding="utf-8", newline="") as f:
+
+
+        # --- 1) Écriture des metadata ---
+        for key, value in df_metadata.iloc[0].items():
+            if pd.isna(value):
+                f.write(f"{key}{sep}\n")
+            else:
+                f.write(f"{key}{sep}{value}\n")
+
+        # --- 2) Ligne vide de séparation ---
+        f.write("\n")
+
+        # --- 3) Écriture du DataFrame principal ---
+        df_data.to_csv(
+            f,
+            sep=sep,
+            index=False
+        )
+
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+#                          
+# ──────────────────────────────────────────────────────────────────────────────
 
 
 def get_ON_OFF(Read_CVM_Dataframes: list[pd.DataFrame], Target_voltage: float):
@@ -584,9 +635,44 @@ def get_ON_OFF(Read_CVM_Dataframes: list[pd.DataFrame], Target_voltage: float):
 
 
 
+# ──────────────────────────────────────────────────────────────────────────────
+#                  Average DF        
+# ──────────────────────────────────────────────────────────────────────────────
 
 
+def Average_DF(df: pd.DataFrame, R_col: str = "Cmem", V_col: str = "Vwrite"):
 
+    # We first round the Vw cause sometimes unprecise float
+    DF = df.copy()
+    DF[V_col] = DF[V_col].round(4)
+
+    # Now we recover the mean of each R for a given Vw
+    Safe_V = []
+    R_mean = []
+    R_std = []
+
+    for v in DF[V_col]:
+
+        if v in Safe_V:
+            break
+        
+        # Yoow this mask help us choose all the R for a given V.
+        mask = DF[V_col] == v
+        r_list = DF.loc[mask, R_col].astype(float).to_numpy()
+        r_mean = np.mean(r_list)
+        r_std = np.std(r_list)
+
+        R_mean.append(r_mean)
+        R_std.append(r_std)
+        Safe_V.append(v)
+
+    DF_MEAN = pd.DataFrame({
+        V_col: Safe_V,
+        R_col: R_mean,
+        "C_std": R_std
+    })
+
+    return DF_MEAN
 
 
 

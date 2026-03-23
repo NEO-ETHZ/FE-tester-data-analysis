@@ -670,6 +670,7 @@ def Dashboard_memCVM(
 
     # 2) Construire les listes pulse_number, Cmem et Vwrite
     pulse_numbers = []
+    loop = []
     Cmem_list = []
     Vwrite_list = []
 
@@ -677,8 +678,10 @@ def Dashboard_memCVM(
         Cmem = float(get_capacitance_near_target_bias(df,target=reading_voltage))
 
         pulse_numbers.append(idx)
+        loop.append(df["Loop"][0])
         Cmem_list.append(Cmem)
         Vwrite_list.append(v)
+        
 
 
     # --- Raccourcis / formatage sûr ---
@@ -785,6 +788,8 @@ def Dashboard_memCVM(
 
     pulse_numbers = np.array(pulse_numbers)
     pulse_numbers = pulse_numbers[mask]
+    loop = np.array(loop)
+    loop = loop[mask]
     Cmem_list = np.array(Cmem_list)
     Cmem_list = Cmem_list[mask]
     Vwrite_list = np.array(Vwrite_list)
@@ -840,10 +845,21 @@ def Dashboard_memCVM(
     Pulse_plot.legend(frameon = False, fontsize = 11.5)
 
 
+    # Export of the dataframe for the result at the specific Vr :
+    DF_Vr = pd.DataFrame({
+        "Index": pulse_numbers,
+        "Loop": loop,
+        "Vwrite": Vwrite_list,
+        "Cmem": Cmem_list
+    })
+
 
     os.makedirs(Output_path, exist_ok=True)
     plot_name = f"{metadata['Date'][0]}_{metadata['Name'][0]}_{metadata['Device_ID'][0]}_Dashboard.png"
     Output_path = os.path.join(Output_path, plot_name)
     plt.savefig(Output_path, dpi=300)
     print(f"Dashboard saved to: {Output_path}")
+
+    return DF_Vr
+
 
