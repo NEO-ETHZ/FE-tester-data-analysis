@@ -1,3 +1,13 @@
+# =============================================================================
+# metadata_utils.py
+# Utility functions for parsing FE-tester .dat files (endurance measurements).
+# Covers: raw block extraction, metadata parsing, and per-measurement-type
+# DataFrame construction (DHM / CVM / PUND).
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Imports
+# -----------------------------------------------------------------------------
 import pandas as pd
 import io
 from datetime import datetime
@@ -14,6 +24,11 @@ import json
 import re
 import io
 from datetime import datetime
+
+
+# =============================================================================
+# 1. RAW FILE PARSING — locate and extract the fatigue result block
+# =============================================================================
 
 def fatigue_data_extraction(full_path, ):
 
@@ -53,11 +68,11 @@ def fatigue_data_extraction(full_path, ):
     return data_lines_complete_fatigue
 
 
-# ---------------------------------------------------
-# ---------------------------------------------------
-
-
-# --- Return a string object and a dict with metadata fields ---
+# =============================================================================
+# 2. METADATA PARSING — extract scalar parameters from the result block
+#    Returns three metadata dicts (DHM / CVM / PUND) + three info_text strings
+#    ready to be placed on plots.
+# =============================================================================
 
 def extract_metadata(
     data_lines,
@@ -365,9 +380,10 @@ def extract_metadata(
 
 
 
-# ---------------------------------------------------
-# ---------------------------------------------------
-
+# =============================================================================
+# 3. FATIGUE SUMMARY TABLE — build per-cycle summary DataFrames (DHM/CVM/PUND)
+#    from the Result Table block (one row per fatigue cycle).
+# =============================================================================
 
 def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, metadata_dict_DHM, metadata_dict_CVM, metadata_dict_PUND):
     
@@ -416,6 +432,8 @@ def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, met
         f'{metadata_dict_CVM["CVM_number"]}-CVM EpsAv [1]',
         f'{metadata_dict_CVM["CVM_number"]}-CVM Cpk+ [F]',
         f'{metadata_dict_CVM["CVM_number"]}-CVM Cpk- [F]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Vmax+ [V]',
+        f'{metadata_dict_CVM["CVM_number"]}-CVM Vmax- [V]',
     ]
 
     cols_PUND = [
@@ -489,10 +507,9 @@ def fatigue_dataframe_extraction(data_lines_complete_fatigue, point_removal, met
 
 
 
-# ---------------------------------------------------
-# ---------------------------------------------------
-
-
+# =============================================================================
+# 4. DHM LOOP DATA — extract one full hysteresis DataFrame per fatigue cycle
+# =============================================================================
 
 def DHM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_DHM, metadata_dict_DHM):
     
@@ -553,6 +570,12 @@ def DHM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_DHM, 
 
 
 
+
+
+# =============================================================================
+# 5. CVM LOOP DATA — extract one capacitance-voltage DataFrame per fatigue cycle
+# =============================================================================
+
 def CVM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_CVM, metadata_dict_CVM):
     if metadata_dict_CVM["CVM_present"] is False:
         return []  # Return an empty list if CVM data is not present   
@@ -602,12 +625,145 @@ def CVM_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_CVM, 
 
         print(len(CVM_dataframe), "CVM dataframe loaded.")
 
+
+
         # Add a column with the cycle number to each DataFrame
         for i, (df, cycle) in enumerate(zip(CVM_dataframe, df_fatigue_CVM["Cycles [n]"])):
+
+            memory_window = extract_memory_window(df, voltage_col='Bias [V]', cap_col='C [F]', v_target=0.0, v_window=0.1)
+            V_peak = extract_peak_voltage(df, voltage_col='Bias [V]', cap_col='C [F]')
+            df.insert(0, "Memory_Window", memory_window['memory_window'])  # Add a column at the first position with the memory window
+            df.insert(0, "V_peak_HCS", V_peak['V_peak_HCS'])  # Add a column at the first position with the HCS peak voltage
+            df.insert(0, "V_peak_LCS", V_peak['V_peak_LCS'])  # Add a column at the first position with the LCS peak voltage
             df.insert(0, "Cycle", cycle)  # Add a column at the first position with the cycle number
 
         return CVM_dataframe
 
+
+
+
+def extract_memory_window(df, voltage_col='Bias [V]', cap_col='C [F]', v_target=0.0, v_window=0.1):
+    """
+    Extract the memory window (HCS and LCS capacitance at 0V) from a C-V hysteresis loop.
+
+    The sweep is split into two branches by detecting the voltage turning point:
+      - Forward branch: bias sweeping toward +Vmax (LCS — coming from negative side)
+      - Backward branch: bias sweeping back toward 0 / -Vmax (HCS — coming from positive side)
+
+    Parameters
+    ----------
+    df          : DataFrame with at least voltage and capacitance columns
+    voltage_col : name of the voltage column
+    cap_col     : name of the capacitance column
+    v_target    : voltage at which to read capacitance (default 0 V)
+    v_window    : ±tolerance around v_target used for the local interpolation (default 0.1 V)
+
+    Returns
+    -------
+    dict with keys:
+        'C_HCS'          : capacitance on the HCS branch at v_target
+        'C_LCS'          : capacitance on the LCS branch at v_target
+        'memory_window'  : C_HCS - C_LCS
+        'cycle'          : cycle number from the dataframe (if present)
+    """
+    V = df[voltage_col].values
+    C = df[cap_col].values
+
+    # --- Find the turning point (index of max |V|) ---
+    turning_idx = np.argmax(np.abs(V))
+
+    # Split into two half-sweeps
+    branch_1 = df.iloc[:turning_idx + 1]   # first half  (e.g. +Vstart → +Vmax)
+    branch_2 = df.iloc[turning_idx:]        # second half (e.g. +Vmax → −Vmax → back)
+
+    # Identify which branch carries HCS vs LCS at 0V
+    # HCS comes from the branch that passed through negative voltages
+    # → the branch whose voltage minimum is most negative
+    if branch_1[voltage_col].min() < branch_2[voltage_col].min():
+        hcs_branch, lcs_branch = branch_1, branch_2
+    else:
+        hcs_branch, lcs_branch = branch_2, branch_1
+
+    def interpolate_at_target(branch, v_col, c_col, v0, dv):
+        """Linear interpolation of C at v0 using the nearest points within ±dv."""
+        mask = (branch[v_col] >= v0 - dv) & (branch[v_col] <= v0 + dv)
+        sub = branch[mask].sort_values(v_col)
+        if len(sub) < 2:
+            # Fall back to nearest single point
+            idx = (branch[v_col] - v0).abs().idxmin()
+            return branch.loc[idx, c_col]
+        return float(np.interp(v0, sub[v_col].values, sub[c_col].values))
+
+    C_HCS = interpolate_at_target(hcs_branch, voltage_col, cap_col, v_target, v_window)
+    C_LCS = interpolate_at_target(lcs_branch, voltage_col, cap_col, v_target, v_window)
+
+    result = {
+        'C_HCS': C_HCS,
+        'C_LCS': C_LCS,
+        'memory_window': C_HCS - C_LCS,
+    }
+    if 'Cycle' in df.columns:
+        result['cycle'] = df['Cycle'].iloc[0]
+
+    return result
+
+
+
+
+def extract_peak_voltage(df, voltage_col='Bias [V]', cap_col='C [F]'):
+    """
+    Find the voltage at which capacitance peaks on each branch of the C-V loop.
+
+    These correspond to the coercive/switching voltages of the FeCAP.
+
+    Parameters
+    ----------
+    df          : DataFrame with voltage and capacitance columns
+    voltage_col : name of the voltage column
+    cap_col     : name of the capacitance column
+
+    Returns
+    -------
+    dict with keys:
+        'V_peak_HCS'  : voltage of C peak on the HCS branch (typically negative)
+        'C_peak_HCS'  : capacitance value at that peak
+        'V_peak_LCS'  : voltage of C peak on the LCS branch (typically positive)
+        'C_peak_LCS'  : capacitance value at that peak
+        'cycle'       : cycle number (if present)
+    """
+    V = df[voltage_col].values
+
+    # --- Same branch splitting as before ---
+    turning_idx = np.argmax(np.abs(V))
+    branch_1 = df.iloc[:turning_idx + 1]
+    branch_2 = df.iloc[turning_idx:]
+
+    if branch_1[voltage_col].min() < branch_2[voltage_col].min():
+        hcs_branch, lcs_branch = branch_1, branch_2
+    else:
+        hcs_branch, lcs_branch = branch_2, branch_1
+
+    # --- Peak on each branch ---
+    hcs_peak_idx = hcs_branch[cap_col].idxmax()
+    lcs_peak_idx = lcs_branch[cap_col].idxmax()
+
+    result = {
+        'V_peak_HCS': hcs_branch.loc[hcs_peak_idx, voltage_col],
+        'C_peak_HCS': hcs_branch.loc[hcs_peak_idx, cap_col],
+        'V_peak_LCS': lcs_branch.loc[lcs_peak_idx, voltage_col],
+        'C_peak_LCS': lcs_branch.loc[lcs_peak_idx, cap_col],
+    }
+    if 'Cycle' in df.columns:
+        result['cycle'] = df['Cycle'].iloc[0]
+
+    return result
+
+
+
+
+# =============================================================================
+# 6. PUND LOOP DATA — extract one PUND pulse DataFrame per fatigue cycle
+# =============================================================================
 
 def PUND_data_extraction(full_path, Cycles_total, point_removal, df_fatigue_PUND, metadata_dict_PUND):
     if metadata_dict_PUND["PUND_present"] is False:

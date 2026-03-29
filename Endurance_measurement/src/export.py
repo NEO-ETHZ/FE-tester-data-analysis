@@ -1,8 +1,18 @@
 
 import os
+import re
 import pandas as pd
 import csv
 import numpy as np
+
+def _safe_filepath(directory, filename, max_len=259):
+    """Return the file path, stripping the leading YYYY-MM-DD_ prefix from the
+    filename when the full path would exceed max_len characters (Windows MAX_PATH)."""
+    full = os.path.join(directory, filename)
+    if len(full) <= max_len:
+        return full
+    short = re.sub(r'^\d{4}-\d{2}-\d{2}_', '', filename)
+    return os.path.join(directory, short)
 
 
 def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_DHM, metadata_dict_CVM, metadata_dict_PUND, output_path, base_name):
@@ -13,7 +23,7 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
 
     if metadata_dict_DHM["DHM_present"] == True:
 
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_DHM["Measurement_date_iso"]}_{base_name}_Main-DHM.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_DHM['Measurement_date_iso']}_{base_name}_Main-DHM.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -54,7 +64,7 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
 
     if metadata_dict_CVM["CVM_present"] == True:
 
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_CVM["Measurement_date_iso"]}_{base_name}_Main-CVM.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_Main-CVM.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -95,7 +105,7 @@ def main_export_csv(Dataframe_DHM, Dataframe_CVM, Dataframe_PUND, metadata_dict_
 
     if metadata_dict_PUND["PUND_present"] == True:
 
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_PUND["Measurement_date_iso"]}_{base_name}_Main-PUND.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_Main-PUND.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -147,7 +157,7 @@ def export_csv_DHM(Dataframe, metadata_dict_DHM, output_path, base_name):
 
 
         Dataframe = pd.concat(Dataframe, axis = 1)    # Concatenate all dataframes along columns
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_DHM["Measurement_date_iso"]}_{base_name}_FatigueDHM.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_DHM['Measurement_date_iso']}_{base_name}_FatigueDHM.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -195,7 +205,7 @@ def export_csv_CVM(Dataframe, metadata_dict_CVM, output_path, base_name):
 
 
         Dataframe = pd.concat(Dataframe, axis = 1)    # Concatenate all dataframes along columns
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_CVM["Measurement_date_iso"]}_{base_name}_FatigueCVM.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_FatigueCVM.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -243,7 +253,7 @@ def export_csv_PUND(Dataframe, metadata_dict_PUND, output_path, base_name):
 
 
         Dataframe = pd.concat(Dataframe, axis = 1)    # Concatenate all dataframes along columns
-        csv_filename = os.path.join(output_csv_data_path, f"{metadata_dict_PUND["Measurement_date_iso"]}_{base_name}_FatiguePUND.csv")
+        csv_filename = _safe_filepath(output_csv_data_path, f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_FatiguePUND.csv")
         
         # We store the string values of the metadata dictionary into a list and we replace ":" by tab
         values_list = []
@@ -359,7 +369,7 @@ def export_csv_PUND_origin_friendly(Dataframe_list, metadata_dict_PUND, output_p
     DATAFRAME_FINAL = pd.concat(DATAFRAME_FINAL, axis = 1)
 
 
-    csv_filename = os.path.join(
+    csv_filename = _safe_filepath(
         output_csv_data_path,
         f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_FatiguePUND_ORIGIN_FRIENDLY.csv"
     )

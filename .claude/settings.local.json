@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import json; nb=json.load\\(open\\(''main.ipynb''\\)\\); [print\\(f''=== Cell {i} ===\\\\n{\"\".join\\(c[\"\"source\"\"]\\)}''\\) for i,c in enumerate\\(nb[''cells'']\\) if c[''cell_type'']==''code'']\")"
+    ]
+  }
+}

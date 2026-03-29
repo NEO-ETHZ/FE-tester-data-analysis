@@ -14,144 +14,106 @@ import re
 import io
 from datetime import datetime
 
+def _safe_savepath(directory, filename, max_len=259):
+    """Return the save path, stripping the leading YYYY-MM-DD_ prefix from the
+    filename when the full path would exceed max_len characters which is 260 on Windows (Windows MAX_PATH)."""
+    full = os.path.join(directory, filename)
+    if len(full) <= max_len:
+        return full
+    short = re.sub(r'^\d{4}-\d{2}-\d{2}_', '', filename)
+    return os.path.join(directory, short)
+
 def folder_main_plot(output_path):
         output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)  # Ensure output directory exists
         # Save figure (bbox_inches='tight' ensures everything fits inside)
 
+        
 
-def main_plot( df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DHM, metadata_dict_CVM, metadata_dict_PUND, metadata_str_DHM, metadata_str_CVM, metadata_str_PUND, output_path, base_name, labelsize):
+
+def main_plot(df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, CVM_dataframe,
+              metadata_dict_DHM, metadata_dict_CVM, metadata_dict_PUND, 
+              metadata_str_DHM, metadata_str_CVM, metadata_str_PUND, 
+              output_path, base_name, labelsize):
     
     label_size = labelsize
 
     # ----------- DHM MEASUREMENT -----------
     if metadata_dict_DHM.get("DHM_present", False):
-        fig, axs = plt.subplots(2, 2, figsize=(16, 10))
-        fig.suptitle("DHM measurement", fontsize=label_size + 2, fontweight="bold")
 
-        # Pr+
+        dhm_num = metadata_dict_DHM["DHM_number"]
+
+        fig = plt.figure(figsize=(16, 10), facecolor='white')
+        fig.suptitle("DHM measurement", fontsize=label_size + 4, fontweight="bold", y=0.98)
+
+        gs = fig.add_gridspec(2, 2, left=0.08, right=0.97, top=0.92, bottom=0.09,
+                              wspace=0.25, hspace=0.25)
+        ax_pr   = fig.add_subplot(gs[0, :])   # full top row — polarization
+        ax_vc   = fig.add_subplot(gs[1, 0])
+        ax_meta = fig.add_subplot(gs[1, 1])
+
+        # --- Pr ---
         try:
-            axs[0,0].plot(
-                df_fatigue_DHM["Cycles [n]"],
-                df_fatigue_DHM["1-DHM Pr+ [uC/cm2]"],
-                color=(0.25, 0.55, 0.85),
-                marker='o',
-                label='Pr+'
-            )
-            axs[0,0].plot(
-                df_fatigue_DHM["Cycles [n]"],
-                abs(df_fatigue_DHM["1-DHM Pr- [uC/cm2]"]),
-                color=(0.25, 0.85, 0.55),
-                marker='o',
-                label='Pr-'
-            )
+            ax_pr.plot(df_fatigue_DHM["Cycles [n]"], df_fatigue_DHM[f"{dhm_num}-DHM Pr+ [uC/cm2]"],
+                       color=(0.18, 0.45, 0.78), marker='o', markersize=7,
+                       linewidth=2.2, label='Pr+')
+            ax_pr.plot(df_fatigue_DHM["Cycles [n]"], df_fatigue_DHM[f"{dhm_num}-DHM Pr- [uC/cm2]"],
+                       color=(0.13, 0.70, 0.44), marker='s', markersize=7,
+                       linewidth=2.2, label='|Pr−|')
         except Exception as e:
             print("Error plotting DHM Pr data:", e)
+        ax_pr.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+        ax_pr.set_ylabel("Pr  (μC cm⁻²)", fontsize=label_size, fontweight='bold')
+        ax_pr.set_xscale('log')
+        ax_pr.set_title("Remnant polarization vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+        ax_pr.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_pr.tick_params(axis='both', labelsize=label_size, direction='in',
+                          which='both', top=True, right=True, length=5, width=1.0)
+        ax_pr.set_facecolor('white')
+        ax_pr.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+        for spine in ax_pr.spines.values():
+            spine.set_linewidth(1.0)
 
-        axs[0,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[0,0].set_ylabel("Pr (μC/cm²)", fontsize=label_size)
-        axs[0,0].set_xscale('log')
-        axs[0,0].set_title("Pr")
-        axs[0,0].legend()
-        axs[0,0].tick_params(axis='both', labelsize=label_size)
-
-        # Jpk
-        ax1 = axs[0, 1]
-        ax2 = ax1.twinx()
+        # --- Vc ---
         try:
-            ax1.plot(
-                df_fatigue_DHM["Cycles [n]"],
-                df_fatigue_DHM["1-DHM Ipk+ [A]"] / metadata_dict_DHM["Device_area_um2"],
-                label='Jpk +',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-            ax2.plot(
-                df_fatigue_DHM["Cycles [n]"],
-                df_fatigue_DHM["1-DHM Ipk- [A]"] / metadata_dict_DHM["Device_area_um2"],
-                label='Jpk -',
-                color=(0.55, 0.25, 0.85),
-                marker='o'
-            )
-        except Exception as e:
-            print("Error plotting DHM Jpk data:", e)
-
-        axs[0,1].set_title("Peak current density Jpk")
-        axs[0,1].set_xscale('log')
-        axs[0,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        ax1.set_ylabel("Jpk + [A/μm²]", color=(0.85, 0.55, 0.25), fontsize=label_size)
-        ax2.set_ylabel("Jpk - [A/μm²]", color=(0.55, 0.25, 0.85), fontsize=label_size)
-        ax1.tick_params(axis='both', labelsize=label_size)
-        ax2.tick_params(axis='both', labelsize=label_size)
-
-        # Vc
-        try:
-            axs[1,0].plot(
-                df_fatigue_DHM["Cycles [n]"],
-                df_fatigue_DHM["1-DHM Vc+ [V]"],
-                color=(0.25, 0.55, 0.85),
-                marker='o',
-                label='Vc+'
-            )
-            axs[1,0].plot(
-                df_fatigue_DHM["Cycles [n]"],
-                abs(df_fatigue_DHM["1-DHM Vc- [V]"]),
-                color=(0.25, 0.85, 0.55),
-                marker='o',
-                label='Vc-'
-            )
+            ax_vc.plot(df_fatigue_DHM["Cycles [n]"], df_fatigue_DHM["1-DHM Vc+ [V]"],
+                       color=(0.18, 0.45, 0.78), marker='o', markersize=7,
+                       linewidth=2.2, label='Vc+')
+            ax_vc.plot(df_fatigue_DHM["Cycles [n]"], df_fatigue_DHM["1-DHM Vc- [V]"],
+                       color=(0.13, 0.70, 0.44), marker='s', markersize=7,
+                       linewidth=2.2, label='|Vc−|')
         except Exception as e:
             print("Error plotting DHM Vc data:", e)
+        ax_vc.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+        ax_vc.set_ylabel("Vc  (V)", fontsize=label_size, fontweight='bold')
+        ax_vc.set_xscale('log')
+        ax_vc.set_title("Coercive voltage vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+        ax_vc.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_vc.tick_params(axis='both', labelsize=label_size, direction='in',
+                          which='both', top=True, right=True, length=5, width=1.0)
+        ax_vc.set_facecolor('white')
+        ax_vc.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+        for spine in ax_vc.spines.values():
+            spine.set_linewidth(1.0)
 
-        axs[1,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,0].set_ylabel("Vc (V)", fontsize=label_size)
-        axs[1,0].set_xscale('log')
-        axs[1,0].set_title("Vc")
-        axs[1,0].legend()
-        axs[1,0].tick_params(axis='both', labelsize=label_size)
-
-        # Wloss
-        try:
-            axs[1,1].plot(
-                df_fatigue_DHM["Cycles [n]"],
-                df_fatigue_DHM["1-DHM Wloss [uJ/cm2]"],
-                label='Cycle',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-        except Exception as e:
-            print("Error plotting DHM Wloss data:", e)
-
-        axs[1,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,1].set_ylabel("Wloss (μJ/cm²)", fontsize=label_size)
-        axs[1,1].set_xscale('log')
-        axs[1,1].set_title("W loss")
-        axs[1,1].tick_params(axis='both', labelsize=label_size)
-
-        info_text = metadata_str_DHM
-        fig.text(
-            0.85,
-            0.5,
-            info_text,
-            fontsize=13,
-            va='center',
-            bbox=dict(boxstyle="round", facecolor="whitesmoke", edgecolor="gray")
-        )
-
-        plt.subplots_adjust(
-            left=0.07,
-            right=0.78,
-            top=0.92,
-            bottom=0.08,
-            wspace=0.3,
-            hspace=0.25
-        )
+        # --- Metadata dashboard ---
+        ax_meta.axis('off')
+        ax_meta.patch.set_facecolor('#f7f7f7')
+        ax_meta.text(0.05, 0.97, metadata_str_DHM,
+                     fontsize=14.5, va='top', ha='left',
+                     transform=ax_meta.transAxes, family='monospace',
+                     linespacing=1.55)
+        for spine in ax_meta.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+            spine.set_edgecolor('#aaaaaa')
 
         output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)
 
+        #_safe_savepath is a function define at the beginning of this file to avoid Windows MAX_PATH issues by stripping the leading date prefix from the filename if needed
         plt.savefig(
-            os.path.join(
+            _safe_savepath(
                 output_main_plot,
                 f"{metadata_dict_DHM['Measurement_date_iso']}_{base_name}_Fatigue-DHM_Main_Plot.png"
             ),
@@ -163,142 +125,96 @@ def main_plot( df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DH
         plt.close(fig)
 
     # ----------- CVM MEASUREMENT -----------
+
+
+    list_memory_window = []
+    V_peak_HCS = []
+    V_peak_LCS = []
+
+    for df in CVM_dataframe:
+        list_memory_window.append(df['Memory_Window'].iloc[0])  # Assuming Memory_Window is constant within each DataFrame
+        V_peak_HCS.append(df['V_peak_HCS'].iloc[0])  # Assuming V_peak_HCS is constant within each DataFrame
+        V_peak_LCS.append(df['V_peak_LCS'].iloc[0])  # Assuming V_peak_LCS is constant within each DataFrame
+
+    list_memory_window = np.array(list_memory_window)  # Convert to numpy array for easier plotting
+    V_peak_HCS = np.array(V_peak_HCS)
+    V_peak_LCS = np.array(V_peak_LCS)
+        
+
     if metadata_dict_CVM.get("CVM_present", False):
-        fig, axs = plt.subplots(2, 2, figsize=(16, 10))
-        fig.suptitle("CV measurement", fontsize=label_size + 2, fontweight="bold")
+        cvm_num = metadata_dict_CVM["CVM_number"]
 
-        # Cav & Rav
-        ax1 = axs[0, 0]
-        ax2 = ax1.twinx()
+        fig = plt.figure(figsize=(16, 10), facecolor='white')
+        fig.suptitle("CVM measurement", fontsize=label_size + 4, fontweight="bold", y=0.98)
+
+        gs = fig.add_gridspec(2, 2, left=0.08, right=0.97, top=0.92, bottom=0.09,
+                              wspace=0.25, hspace=0.25)
+        ax_mw   = fig.add_subplot(gs[0, :])   # full top row — memory window
+        ax_vmax = fig.add_subplot(gs[1, 0])   # bottom left — Vmax peak voltage
+        ax_meta = fig.add_subplot(gs[1, 1])   # bottom right — metadata
+
+        # --- Memory window ---
         try:
-            ax1.plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM Cav [F]"] / metadata_dict_CVM["Device_area_um2"],
-                label='Cav',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-            ax2.plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM Rav [Ohm]"] / metadata_dict_CVM["Device_area_um2"],
-                label='Rav -',
-                color=(0.55, 0.25, 0.85),
-                marker='o'
-            )
+            ax_mw.plot(df_fatigue_CVM["Cycles [n]"], list_memory_window*1e+12,
+                       color=(0.85, 0.35, 0.20), marker='o', markersize=7,
+                       linewidth=2.2, label='Memory window')
         except Exception as e:
-            print("Error plotting CVM Cav/Rav data:", e)
+            print("Error plotting CVM memory window:", e)
+        ax_mw.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+        ax_mw.set_ylabel("Memory window at 0V (pF)", fontsize=label_size, fontweight='bold')
+        ax_mw.set_xscale('log')
+        ax_mw.set_title("Memory window vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+        ax_mw.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_mw.tick_params(axis='both', labelsize=label_size, direction='in',
+                          which='both', top=True, right=True, length=5, width=1.0)
+        ax_mw.set_facecolor('white')
+        ax_mw.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+        for spine in ax_mw.spines.values():
+            spine.set_linewidth(1.0)
 
-        axs[0,0].set_title("Capacitance and resistance average")
-        axs[0,0].set_xscale('log')
-        axs[0,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        ax1.set_ylabel("Cav [F]", color=(0.85, 0.55, 0.25), fontsize=label_size)
-        ax2.set_ylabel("Rav [Ohm]", color=(0.55, 0.25, 0.85), fontsize=label_size)
-        ax1.tick_params(axis='both', labelsize=label_size)
-        ax2.tick_params(axis='both', labelsize=label_size)
-        ax1.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-        ax2.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-
-        # TanDmax & TanDav
-        ax1 = axs[0, 1]
-        ax2 = ax1.twinx()
+        # --- Vmax peak voltage ---
         try:
-            ax1.plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM TanDmax [1]"] / metadata_dict_CVM["Device_area_um2"],
-                label='TanDmax',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-            ax2.plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM TanDav [1]"] / metadata_dict_CVM["Device_area_um2"],
-                label='TanDav',
-                color=(0.55, 0.25, 0.85),
-                marker='o'
-            )
+            ax_vmax.plot(df_fatigue_CVM["Cycles [n]"],
+                         V_peak_LCS,
+                         color="#810303", marker='o', markersize=7,
+                         linewidth=2.2, label='V_peak_LCS')
+            ax_vmax.plot(df_fatigue_CVM["Cycles [n]"],
+                         V_peak_HCS,
+                         color="#55037B", marker='s', markersize=7,
+                         linewidth=2.2, label='V_peak_HCS')
         except Exception as e:
-            print("Error plotting CVM TanD data:", e)
+            print("Error plotting CVM Vmax data:", e)
+        ax_vmax.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+        ax_vmax.set_ylabel("Vmax  (V)", fontsize=label_size, fontweight='bold')
+        ax_vmax.set_xscale('log')
+        ax_vmax.set_title("Capacitance-peak voltage vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+        ax_vmax.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_vmax.tick_params(axis='both', labelsize=label_size, direction='in',
+                            which='both', top=True, right=True, length=5, width=1.0)
+        ax_vmax.set_facecolor('white')
+        ax_vmax.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+        for spine in ax_vmax.spines.values():
+            spine.set_linewidth(1.0)
 
-        axs[0,1].set_title("Tan(delta) max and average")
-        axs[0,1].set_xscale('log')
-        axs[0,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        ax1.set_ylabel("Tan(delta)max", color=(0.85, 0.55, 0.25), fontsize=label_size)
-        ax2.set_ylabel("Tan(delta)av", color=(0.55, 0.25, 0.85), fontsize=label_size)
-        ax1.tick_params(axis='both', labelsize=label_size)
-        ax2.tick_params(axis='both', labelsize=label_size)
-        ax1.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-        ax2.ticklabel_format(style='sci', axis='y', scilimits=(0,0))
-
-        # Cpk
-        try:
-            axs[1,0].plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM Cpk+ [F]"],
-                color=(0.25, 0.55, 0.85),
-                marker='o',
-                label='Cpk+'
-            )
-            axs[1,0].plot(
-                df_fatigue_CVM["Cycles [n]"],
-                abs(df_fatigue_CVM["2-CVM Cpk- [F]"]),
-                color=(0.25, 0.85, 0.55),
-                marker='o',
-                label='Cpk-'
-            )
-        except Exception as e:
-            print("Error plotting CVM Cpk data:", e)
-
-        axs[1,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,0].set_ylabel("Cpk [F]", fontsize=label_size)
-        axs[1,0].set_xscale('log')
-        axs[1,0].set_title("Capacitance peak")
-        axs[1,0].legend()
-        axs[1,0].tick_params(axis='both', labelsize=label_size)
-
-        # EpsAv
-        try:
-            axs[1,1].plot(
-                df_fatigue_CVM["Cycles [n]"],
-                df_fatigue_CVM["2-CVM EpsAv [1]"],
-                label='Eps_av',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-        except Exception as e:
-            print("Error plotting CVM EpsAv data:", e)
-
-        axs[1,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,1].set_ylabel("Eps_av", fontsize=label_size)
-        axs[1,1].set_xscale('log')
-        axs[1,1].set_title("Electrical permittivity average")
-        axs[1,1].tick_params(axis='both', labelsize=label_size)
-
-        info_text = metadata_str_CVM
-        fig.text(
-            0.85,
-            0.5,
-            info_text,
-            fontsize=13,
-            va='center',
-            bbox=dict(boxstyle="round", facecolor="whitesmoke", edgecolor="gray")
-        )
-
-        plt.subplots_adjust(
-            left=0.07,
-            right=0.78,
-            top=0.92,
-            bottom=0.08,
-            wspace=0.3,
-            hspace=0.25
-        )
+        # --- Metadata panel ---
+        ax_meta.axis('off')
+        ax_meta.patch.set_facecolor('#f7f7f7')
+        ax_meta.text(0.05, 0.97, metadata_str_CVM,
+                     fontsize=13.5, va='top', ha='left',
+                     transform=ax_meta.transAxes, family='monospace',
+                     linespacing=1.55)
+        for spine in ax_meta.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+            spine.set_edgecolor('#aaaaaa')
 
         output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)
 
         plt.savefig(
-            os.path.join(
+            _safe_savepath(
                 output_main_plot,
-                f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_Fatigue_CVM_Main_Plot.png"
+                f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_Fatigue-CVM_Main_Plot.png"
             ),
             dpi=300,
             bbox_inches='tight'
@@ -308,135 +224,87 @@ def main_plot( df_fatigue_DHM, df_fatigue_CVM, df_fatigue_PUND, metadata_dict_DH
         plt.close(fig)
 
     # ----------- PUND MEASUREMENT -----------
-    if metadata_dict_PUND.get("PUND_present", False):
-        fig, axs = plt.subplots(2, 2, figsize=(16, 10))
-        fig.suptitle("PUND measurement", fontsize=label_size + 2, fontweight="bold")
 
-        # Pr
+    if metadata_dict_PUND.get("PUND_present", False):
+        pund_num = metadata_dict_PUND["PUND_number"]
+
+        fig = plt.figure(figsize=(16, 10), facecolor='white')
+        fig.suptitle("PUND measurement", fontsize=label_size + 4, fontweight="bold", y=0.98)
+
+        gs = fig.add_gridspec(2, 2, left=0.08, right=0.97, top=0.92, bottom=0.09,
+                              wspace=0.25, hspace=0.25)
+        ax_pr   = fig.add_subplot(gs[0, :])   # full top row — polarization
+        ax_vc   = fig.add_subplot(gs[1, 0])   # bottom left — coercive voltage
+        ax_meta = fig.add_subplot(gs[1, 1])   # bottom right — metadata
+
+        # --- Pr ---
         try:
-            axs[0,0].plot(
-                df_fatigue_PUND["Cycles [n]"],
-                df_fatigue_PUND["3-PM Pr+ [uC/cm2]"],
-                color=(0.25, 0.55, 0.85),
-                marker='o',
-                label='Pr+'
-            )
-            axs[0,0].plot(
-                df_fatigue_PUND["Cycles [n]"],
-                abs(df_fatigue_PUND["3-PM Pr- [uC/cm2]"]),
-                color=(0.25, 0.85, 0.55),
-                marker='o',
-                label='Pr-'
-            )
+            ax_pr.plot(df_fatigue_PUND["Cycles [n]"],
+                       df_fatigue_PUND[f"{pund_num}-PM Pr+ [uC/cm2]"],
+                       color="#3A0580", marker='o', markersize=7,
+                       linewidth=2.2, label='Pr+')
+            ax_pr.plot(df_fatigue_PUND["Cycles [n]"],
+                       df_fatigue_PUND[f"{pund_num}-PM Pr- [uC/cm2]"],
+                       color="#037421", marker='s', markersize=7,
+                       linewidth=2.2, label='|Pr−|')
         except Exception as e:
             print("Error plotting PUND Pr data:", e)
+        ax_pr.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+        ax_pr.set_ylabel("Pr  (μC cm⁻²)", fontsize=label_size, fontweight='bold')
+        ax_pr.set_xscale('log')
+        ax_pr.set_title("Remnant polarization vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+        ax_pr.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+        ax_pr.tick_params(axis='both', labelsize=label_size, direction='in',
+                          which='both', top=True, right=True, length=5, width=1.0)
+        ax_pr.set_facecolor('white')
+        ax_pr.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+        for spine in ax_pr.spines.values():
+            spine.set_linewidth(1.0)
 
-        axs[0,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[0,0].set_ylabel("Pr (μC/cm²)", fontsize=label_size)
-        axs[0,0].set_xscale('log')
-        axs[0,0].set_title("Pr")
-        axs[0,0].legend()
-        axs[0,0].tick_params(axis='both', labelsize=label_size)
-
-        # Jpk
-        ax1 = axs[0, 1]
-        ax2 = ax1.twinx()
+        # --- Vc (optional — column may be absent in some files) ---
         try:
-            ax1.plot(
-                df_fatigue_PUND["Cycles [n]"],
-                df_fatigue_PUND["3-PM Ipk+ [A]"] / metadata_dict_DHM["Device_area_um2"],
-                label='Jpk +',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-            ax2.plot(
-                df_fatigue_PUND["Cycles [n]"],
-                df_fatigue_PUND["3-PM Ipk- [A]"] / metadata_dict_DHM["Device_area_um2"],
-                label='Jpk -',
-                color=(0.55, 0.25, 0.85),
-                marker='o'
-            )
+            ax_vc.plot(df_fatigue_PUND["Cycles [n]"],
+                       df_fatigue_PUND[f"{pund_num}-PM Vc+ [V]"],
+                       color="#3A0580", marker='o', markersize=7,
+                       linewidth=2.2, label='Vc+')
+            ax_vc.plot(df_fatigue_PUND["Cycles [n]"],
+                       df_fatigue_PUND[f"{pund_num}-PM Vc- [V]"],
+                       color="#037421", marker='s', markersize=7,
+                       linewidth=2.2, label='|Vc−|')
+            ax_vc.set_xlabel("Cycles (n)", fontsize=label_size, fontweight='bold')
+            ax_vc.set_ylabel("Vc  (V)", fontsize=label_size, fontweight='bold')
+            ax_vc.set_xscale('log')
+            ax_vc.set_title("Coercive voltage vs. fatigue cycles", fontsize=label_size + 1, fontweight='bold', pad=8)
+            ax_vc.legend(fontsize=label_size - 1, frameon=True, framealpha=0.9, edgecolor='lightgray')
+            ax_vc.tick_params(axis='both', labelsize=label_size, direction='in',
+                              which='both', top=True, right=True, length=5, width=1.0)
+            ax_vc.set_facecolor('white')
+            ax_vc.grid(True, which='major', linestyle='--', linewidth=0.7, color='#cccccc', zorder=0)
+            for spine in ax_vc.spines.values():
+                spine.set_linewidth(1.0)
         except Exception as e:
-            print("Error plotting PUND Jpk data:", e)
+            print("Vc data not available for PUND — skipping plot:", e)
+            ax_vc.axis('off')
 
-        axs[0,1].set_title("Peak current density Jpk")
-        axs[0,1].set_xscale('log')
-        axs[0,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        ax1.set_ylabel("Jpk + [A/μm²]", color=(0.85, 0.55, 0.25), fontsize=label_size)
-        ax2.set_ylabel("Jpk - [A/μm²]", color=(0.55, 0.25, 0.85), fontsize=label_size)
-        ax1.tick_params(axis='both', labelsize=label_size)
-        ax2.tick_params(axis='both', labelsize=label_size)
-
-        # Vc
-        try:
-            axs[1,0].plot(
-                df_fatigue_PUND["Cycles [n]"],
-                df_fatigue_PUND["3-PM Vc+ [V]"],
-                color=(0.25, 0.55, 0.85),
-                marker='o',
-                label='Vc+'
-            )
-            axs[1,0].plot(
-                df_fatigue_PUND["Cycles [n]"],
-                abs(df_fatigue_PUND["3-PM Vc- [V]"]),
-                color=(0.25, 0.85, 0.55),
-                marker='o',
-                label='Vc-'
-            )
-        except Exception as e:
-            print("Error plotting PUND Vc data:", e)
-
-        axs[1,0].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,0].set_ylabel("Vc (V)", fontsize=label_size)
-        axs[1,0].set_xscale('log')
-        axs[1,0].set_title("Vc")
-        axs[1,0].legend()
-        axs[1,0].tick_params(axis='both', labelsize=label_size)
-
-        # Psw
-        try:
-            axs[1,1].plot(
-                df_fatigue_PUND["Cycles [n]"],
-                df_fatigue_PUND["3-PM Psw [uC/cm2]"],
-                label='Cycle',
-                color=(0.85, 0.55, 0.25),
-                marker='o'
-            )
-        except Exception as e:
-            print("Error plotting PUND Psw data:", e)
-
-        axs[1,1].set_xlabel("Cycles [n]", fontsize=label_size)
-        axs[1,1].set_ylabel("Psw [uC/cm2]", fontsize=label_size)
-        axs[1,1].set_xscale('log')
-        axs[1,1].set_title("Switching polarization Psw")
-        axs[1,1].tick_params(axis='both', labelsize=label_size)
-
-        info_text = metadata_str_PUND
-        fig.text(
-            0.85,
-            0.5,
-            info_text,
-            fontsize=13,
-            va='center',
-            bbox=dict(boxstyle="round", facecolor="whitesmoke", edgecolor="gray")
-        )
-
-        plt.subplots_adjust(
-            left=0.07,
-            right=0.78,
-            top=0.92,
-            bottom=0.08,
-            wspace=0.3,
-            hspace=0.25
-        )
+        # --- Metadata panel ---
+        ax_meta.axis('off')
+        ax_meta.patch.set_facecolor('#f7f7f7')
+        ax_meta.text(0.05, 0.97, metadata_str_PUND,
+                     fontsize=11.5, va='top', ha='left',
+                     transform=ax_meta.transAxes, family='monospace',
+                     linespacing=1.55)
+        for spine in ax_meta.spines.values():
+            spine.set_visible(True)
+            spine.set_linewidth(0.8)
+            spine.set_edgecolor('#aaaaaa')
 
         output_main_plot = os.path.join(output_path, "Main plot")
         os.makedirs(output_main_plot, exist_ok=True)
 
         plt.savefig(
-            os.path.join(
+            _safe_savepath(
                 output_main_plot,
-                f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_Fatigue_PUND_Main_Plot.png"
+                f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_Fatigue-PUND_Main_Plot.png"
             ),
             dpi=300,
             bbox_inches='tight'
@@ -465,7 +333,7 @@ def Plot_single_DHM(DHM_dataframe, Cycles_total, label_size, output_main_plot, b
     if Removal > 0:
         Cycles_total = Cycles_total[:-Removal]
 
-    legend_threshold = 15
+    legend_threshold = 1
     n_curves = len(DHM_dataframe)
     use_legend = n_curves <= legend_threshold
 
@@ -589,7 +457,7 @@ def Plot_single_DHM(DHM_dataframe, Cycles_total, label_size, output_main_plot, b
 
     # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_DHM['Measurement_date_iso']}_{base_name}_DHM.png"
-    plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
+    plt.savefig(_safe_savepath(output_main_plot, filename), dpi=300, bbox_inches="tight")
     plt.show()
     plt.close("all")
 
@@ -604,7 +472,7 @@ def Plot_single_CVM(CVM_dataframe, Cycles_total, label_size, output_main_plot, b
     if Removal > 0:
         Cycles_total = Cycles_total[:-Removal]
 
-    legend_threshold = 15
+    legend_threshold = 1
     n_curves = len(CVM_dataframe)
     use_legend = n_curves <= legend_threshold
 
@@ -730,7 +598,7 @@ def Plot_single_CVM(CVM_dataframe, Cycles_total, label_size, output_main_plot, b
 
     # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_CVM['Measurement_date_iso']}_{base_name}_CVM.png"
-    plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
+    plt.savefig(_safe_savepath(output_main_plot, filename), dpi=300, bbox_inches="tight")
     plt.show()
     plt.close("all")
 
@@ -746,7 +614,7 @@ def Plot_single_PUND(PUND_dataframe, Cycles_total, label_size, output_main_plot,
     if Removal > 0:
         Cycles_total = Cycles_total[:-Removal]
 
-    legend_threshold = 15
+    legend_threshold = 1
     n_curves = len(PUND_dataframe)
     use_legend = n_curves <= legend_threshold
 
@@ -892,7 +760,7 @@ def Plot_single_PUND(PUND_dataframe, Cycles_total, label_size, output_main_plot,
 
     # --------- SAUVEGARDE UNIQUE ---------
     filename = f"{metadata_dict_PUND['Measurement_date_iso']}_{base_name}_PUND.png"
-    plt.savefig(os.path.join(output_main_plot, filename), dpi=300, bbox_inches="tight")
+    plt.savefig(_safe_savepath(output_main_plot, filename), dpi=300, bbox_inches="tight")
     plt.show()
     plt.close("all")
 
@@ -1015,7 +883,8 @@ def Plot_multi_PUND(PUND_dataframe, output_path_02, Cycles_total, label_size, ba
         ymax = max(df['P [uC/cm2]'].abs().max() for df in PUND_dataframe)
         ymax = int(np.ceil(ymax / 5.0)) * 5
 
-        colors = ['tab:blue', 'tab:orange', 'tab:green', 'tab:red', 'tab:purple']  
+        colors = ["#000000", "#b82e50", "#3cb44b", "#0024a5", "#f58231"]  # X, U, N, D, P
+        pulse_labels = [ 'X', 'U', 'N', 'D', 'P']
 
         output_plot = os.path.join(output_path_02, "PUND plot")
         output_video = os.path.join(output_path_02, "Video")
@@ -1033,22 +902,20 @@ def Plot_multi_PUND(PUND_dataframe, output_path_02, Cycles_total, label_size, ba
 
             for z, w in enumerate(df):
 
-                label = f'Cycle {j}' 
-                axs[0].plot(w['V'], w['P'], color=colors[z % len(colors)])
+                label = pulse_labels[z] if z < len(pulse_labels) else f"Pulse {z}"
+                axs[0].plot(w['V'], w['P'], color=colors[z % len(colors)], label=label)
 
             axs[0].set_xlabel("Voltage [V]", fontsize = label_size)
             axs[0].set_ylabel("Polarization (μC/cm²)", fontsize = label_size)
             axs[0].tick_params(axis='both', labelsize= label_size)
             axs[0].set_title(f'P-V loop')
             axs[0].grid(True, color='lightgray', linestyle='--', linewidth=0.5)
-            axs[0].legend()
-            axs[0].legend(loc="center left", bbox_to_anchor=(1.02, 0.5), borderaxespad=0)     # Légendes en dehors des graphes
 
 
             for z, w in enumerate(df):
 
-                label = f'Cycle {j}' 
-                axs[1].plot(w['V'], w['I'], color=colors[z % len(colors)])
+                label = pulse_labels[z] if z < len(pulse_labels) else f"Pulse {z}"
+                axs[1].plot(w['V'], w['I'], color=colors[z % len(colors)], label=label)
 
             axs[1].set_xlabel("Voltage [V]", fontsize = label_size)
             axs[1].set_ylabel("Current [A]", fontsize = label_size)
