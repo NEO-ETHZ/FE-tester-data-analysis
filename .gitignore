@@ -1,0 +1,7 @@
+# Python
+__pycache__/
+*.py[oc]
+.venv/
+.*_cache
+*.egg-info
+.ipynb_checkpoints
